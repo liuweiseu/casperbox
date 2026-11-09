@@ -77,7 +77,10 @@ Relative paths in it are relative to the file's directory.
 | `[[mounts]]` | | Extra mounts: `host`, `container` (`~/` = home), `mode` |
 | `[[extra_ports]]` | | Extra ports: `host`, `container`, `protocol` |
 
-Unknown keys and wrong types (e.g. a port written as a string) are reported as errors.
+Unknown keys and wrong types (e.g. a port written as a string) are reported as errors, and so are
+mounted directories that do not exist. Problems that do not stop the container from starting, such as a
+mounted path you cannot read, are warnings: `up` and `restart` then ask before creating the container
+(answer `y` to continue; `--yes` skips the question, e.g. in scripts).
 
 ### Several containers
 
@@ -99,9 +102,9 @@ casperbox ps                      # all casperbox containers, from any directory
 | `casperbox list` | List supported toolflow versions |
 | `casperbox init [FILE] [--toolflow VER] [--force]` | Create a config file (default `casperbox.toml`) |
 | `casperbox build [--no-cache]` | Build the image |
-| `casperbox up` | Start (recreate) the container; builds the image if missing |
+| `casperbox up [--yes]` | Start (recreate) the container; builds the image if missing or outdated |
 | `casperbox down` | Stop and remove the container |
-| `casperbox restart` | `down` + `up` |
+| `casperbox restart [--yes]` | `down` + `up` |
 | `casperbox shell` | Open a login shell as the container user |
 | `casperbox status` | Container status and ports |
 | `casperbox logs [-f]` | Container logs |

@@ -237,6 +237,26 @@ def _host_path(value: str, base: Path) -> Path:
     return p.resolve()
 
 
+def _require_dir(path: Path, what: str) -> None:
+    if not path.exists():
+        raise CasperError(f"{what} does not exist: {path}")
+    if not path.is_dir():
+        raise CasperError(f"{what} is not a directory: {path}")
+
+
+def _check_readable(path: Path, what: str, warnings: list[str]) -> None:
+    """Warn if the current user cannot read a mounted path.
+
+    With userns keep-id the container user has the host user's UID/GID, so the host
+    permissions apply inside the container. A directory also needs execute permission
+    to be listed or entered.
+    """
+    mode = os.R_OK | os.X_OK if path.is_dir() else os.R_OK
+    if not os.access(path, mode):
+        kind = "directory" if path.is_dir() else "file"
+        warnings.append(f"{what}: no read permission on {kind} {path}; it will not be readable in the container")
+
+
 def _check_port(value: int, what: str) -> int:
     if not 1 <= value <= 65535:
         raise CasperError(f"{what} is out of range (1-65535): {value}")
@@ -368,7 +388,7 @@ def _parse_network(top: _Table, default_ports: tuple[int, int]) -> dict[str, Any
     }
 
 
-def _parse_mounts(top: _Table, base: Path, user: str, reserved: set[str]) -> list[Mount]:
+def _parse_mounts(top: _Table, base: Path, user: str, reserved: set[str], warnings: list[str]) -> list[Mount]:
     home = f"/home/{user}"
     reserved = {*reserved, home}
     mounts: list[Mount] = []
@@ -381,6 +401,7 @@ def _parse_mounts(top: _Table, base: Path, user: str, reserved: set[str]) -> lis
             raise CasperError(f"{t.where}.mode must be 'ro' or 'rw'")
         if not hpath.exists():
             raise CasperError(f"{t.where}.host does not exist: {hpath}")
+        _check_readable(hpath, f"{t.where}.host", warnings)
         if cpath == "~":
             cpath = home
         elif cpath.startswith("~/"):
@@ -414,8 +435,8 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
     if vivado_mount not in ("ro", "rw"):
         raise CasperError("vivado.mount must be 'ro' or 'rw'")
     v.finish()
-    if not vivado_dir.is_dir():
-        raise CasperError(f"vivado.dir does not exist: {vivado_dir}")
+    _require_dir(vivado_dir, "vivado.dir")
+    _check_readable(vivado_dir, "vivado.dir", warnings)
     vv = toolflow.vivado_version
     if not (vivado_dir / "Vivado" / vv / "settings64.sh").is_file() and not (vivado_dir / "settings64.sh").is_file():
         warnings.append(
@@ -432,14 +453,16 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
     license_dir = _host_path(p.get("license_dir", str, "~/.Xilinx"), base)
     work_dir = _host_path(p.get("work_dir", str, "./work"), base)
     p.finish()
-    if not license_dir.is_dir():
-        raise CasperError(f"paths.license_dir does not exist: {license_dir}")
+    _require_dir(license_dir, "paths.license_dir")
+    _check_readable(license_dir, "paths.license_dir", warnings)
     if work_dir.exists() and not work_dir.is_dir():
         raise CasperError(f"paths.work_dir is not a directory: {work_dir}")
+    if work_dir.is_dir():  # created by `up` if missing
+        _check_readable(work_dir, "paths.work_dir", warnings)
 
     network = _parse_network(top, DEFAULT_PORTS[RELEASE])
     home = f"/home/{user}"
-    mounts = _parse_mounts(top, base, user, {str(vivado_dir), f"{home}/.Xilinx", f"{home}/work", f"{home}/toolflow"})
+    mounts = _parse_mounts(top, base, user, {str(vivado_dir), f"{home}/.Xilinx", f"{home}/work", f"{home}/toolflow"}, warnings)
     top.finish()
 
     return Config(
@@ -476,7 +499,7 @@ def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
 
     container = _parse_container(top, f"casper-dev-{os_slug(os_image)}", warnings)
     network = _parse_network(top, DEFAULT_PORTS[DEV])
-    mounts = _parse_mounts(top, base, container["user"], set())
+    mounts = _parse_mounts(top, base, container["user"], set(), warnings)
     top.finish()
 
     return Config(

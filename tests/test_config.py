@@ -1,3 +1,4 @@
+import os
 import tomllib
 from pathlib import Path
 
@@ -194,3 +195,35 @@ def test_build_hash_tracks_build_inputs(env, monkeypatch, tmp_path):
     assert h2 != h1  # build file changed
 
     assert podman.build_hash(env(container__user="alice")) != h2  # build arg changed
+
+
+def test_mounted_paths_must_exist(env, tmp_path):
+    with pytest.raises(CasperError, match="vivado.dir does not exist"):
+        env(vivado={"dir": str(tmp_path / "missing")})
+    with pytest.raises(CasperError, match="paths.license_dir does not exist"):
+        env(paths={"license_dir": str(tmp_path / "missing")})
+    (tmp_path / "afile").touch()
+    with pytest.raises(CasperError, match="vivado.dir is not a directory"):
+        env(vivado={"dir": str(tmp_path / "afile")})
+    with pytest.raises(CasperError, match=r"mounts\[0\].host does not exist"):
+        env(mounts=[{"host": str(tmp_path / "missing"), "container": "/x"}])
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can read everything")
+def test_unreadable_mounts_warn(env, tmp_path):
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.touch()
+    locked.chmod(0o300)  # writable but not readable
+    secret.chmod(0o200)
+    try:
+        cfg = env(
+            paths={"license_dir": str(locked)},
+            mounts=[{"host": str(secret), "container": "/data/secret.txt"}],
+        )
+    finally:
+        locked.chmod(0o700)
+        secret.chmod(0o600)
+    assert any("paths.license_dir: no read permission on directory" in w for w in cfg.warnings)
+    assert any("mounts[0].host: no read permission on file" in w for w in cfg.warnings)

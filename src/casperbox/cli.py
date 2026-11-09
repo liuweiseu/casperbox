@@ -210,11 +210,20 @@ def make_app(kind: str) -> typer.Typer:
         """Build the image."""
         do_build(prepare(ctx, config), no_cache)
 
-    @app.command()
-    def up(ctx: typer.Context, config: Path | None = config_opt) -> None:
-        """Start the container (builds the image if missing or outdated, recreates an existing container)."""
-        cfg = prepare(ctx, config)
+    def confirm_warnings(cfg: Config, yes: bool) -> None:
+        """Ask before creating a container when the config produced warnings."""
+        if not cfg.warnings or yes:
+            return
+        if not sys.stdin.isatty():
+            raise CasperError(
+                f"{len(cfg.warnings)} warning(s) above; not continuing without confirmation "
+                "(stdin is not a terminal). Fix them, or pass --yes to continue anyway."
+            )
+        if not typer.confirm(f"{len(cfg.warnings)} warning(s) above. Continue creating the container?", default=False):
+            info("Aborted, nothing was changed")
+            raise typer.Exit(1)
 
+    def do_up(cfg: Config) -> None:
         own = podman.get_container(cfg.name)
         if own:
             podman.check_owner(cfg, own)
@@ -248,9 +257,22 @@ def make_app(kind: str) -> typer.Typer:
             typer.echo(f"  Port : {p.host} -> {p.container}/{p.protocol}")
 
     @app.command()
+    def up(
+        ctx: typer.Context,
+        config: Path | None = config_opt,
+        yes: Annotated[bool, typer.Option("--yes", "-y", help="Do not ask for confirmation on warnings")] = False,
+    ) -> None:
+        """Start the container (builds the image if missing or outdated, recreates an existing container)."""
+        cfg = prepare(ctx, config)
+        confirm_warnings(cfg, yes)
+        do_up(cfg)
+
+    @app.command()
     def down(ctx: typer.Context, config: Path | None = config_opt) -> None:
         """Stop and remove the container."""
-        cfg = prepare(ctx, config)
+        do_down(prepare(ctx, config))
+
+    def do_down(cfg: Config) -> None:
         own = podman.get_container(cfg.name)
         if not own:
             info(f"Container {cfg.name} does not exist")
@@ -260,10 +282,16 @@ def make_app(kind: str) -> typer.Typer:
         info(f"Container {cfg.name} removed")
 
     @app.command()
-    def restart(ctx: typer.Context, config: Path | None = config_opt) -> None:
+    def restart(
+        ctx: typer.Context,
+        config: Path | None = config_opt,
+        yes: Annotated[bool, typer.Option("--yes", "-y", help="Do not ask for confirmation on warnings")] = False,
+    ) -> None:
         """Recreate the container (re-reads the config)."""
-        down(ctx, config)
-        up(ctx, config)
+        cfg = prepare(ctx, config)
+        confirm_warnings(cfg, yes)  # before removing the old container
+        do_down(cfg)
+        do_up(cfg)
 
     @app.command()
     def shell(ctx: typer.Context, config: Path | None = config_opt) -> None:

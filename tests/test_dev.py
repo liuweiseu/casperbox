@@ -1,3 +1,4 @@
+import os
 import tomllib
 from pathlib import Path
 
@@ -115,3 +116,16 @@ def test_build_and_run_args(dev):
     assert "casperbox.kind=dev" in r and "casperbox.os=ubuntu:26.04" in r
     assert "VIVADO_DIR" not in container_env(cfg)
     assert not any("s3cret-pw" in a for a in r)
+
+
+def test_dev_mounts_must_exist_and_be_readable(dev):
+    with pytest.raises(CasperError, match="does not exist"):
+        dev(mounts=[{"host": "../missing", "container": "~/m"}])
+    (dev.tmp / "locked").mkdir()
+    (dev.tmp / "locked").chmod(0o300)
+    try:
+        cfg = dev(mounts=[{"host": "../locked", "container": "~/m"}])
+    finally:
+        (dev.tmp / "locked").chmod(0o700)
+    if os.geteuid() != 0:
+        assert any("no read permission" in w for w in cfg.warnings)
