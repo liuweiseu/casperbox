@@ -1,0 +1,59 @@
+# casper-container 基础 compose 定义
+#
+# 不要直接运行 podman compose，请使用 ./casper.sh。
+# 所有变量来自 casper.sh 生成的 .generated/.env；
+# 用户自定义挂载/端口位于 .generated/compose.override.yml。
+
+# podman-compose 默认把服务放进 pod，而 pod 与 userns keep-id 不能同时使用
+x-podman:
+  in_pod: false
+
+services:
+  casper:
+    image: casper-toolflow:${TOOLFLOW_VERSION}
+    build:
+      context: .
+      dockerfile: versions/${TOOLFLOW_VERSION}/Dockerfile
+      args:
+        BASE_IMAGE: ${BASE_IMAGE}
+        TOOLFLOW_VERSION: ${TOOLFLOW_VERSION}
+        VIVADO_VERSION: ${VIVADO_VERSION}
+        MINICONDA_INSTALLER: ${MINICONDA_INSTALLER}
+        PYTHON_VERSION: ${PYTHON_VERSION}
+        CONDA_ENV_NAME: ${CONDA_ENV_NAME}
+        MLIB_DEVEL_REPO: ${MLIB_DEVEL_REPO}
+        MLIB_DEVEL_BRANCH: ${MLIB_DEVEL_BRANCH}
+        DEVICE_TREE_XLNX_REPO: ${DEVICE_TREE_XLNX_REPO}
+        DEVICE_TREE_XLNX_BRANCH: ${DEVICE_TREE_XLNX_BRANCH}
+        GIT_CLONE_DEPTH: ${GIT_CLONE_DEPTH}
+        SCILAB_VERSION: ${SCILAB_VERSION}
+        SCILAB_URL: ${SCILAB_URL}
+        CONTAINER_USER: ${CONTAINER_USER}
+        USER_UID: ${HOST_UID}
+        USER_GID: ${HOST_GID}
+    container_name: ${CONTAINER_NAME}
+    hostname: ${CONTAINER_HOSTNAME}
+    # 使用 pasta 网络（由 casper.sh 生成，例如 pasta:-I,eth0,--ns-mac-addr,<MAC>）
+    # 端口转发仍通过下面的 ports 完成，由 podman 交给 pasta 处理
+    network_mode: ${PASTA_NETWORK}
+    # 宿主机用户 UID/GID 原样映射进容器，保证挂载目录的读写权限
+    userns_mode: keep-id
+    # entrypoint 需要 root 来设置密码并启动 sshd
+    user: root
+    # 不对挂载目录做 SELinux 重新标记（避免对 Vivado 安装目录做 relabel）
+    security_opt:
+      - label=disable
+    shm_size: ${SHM_SIZE}
+    environment:
+      CONTAINER_PWD: ${CONTAINER_PWD}
+      VNC_PASSWORD: ${VNC_PASSWORD}
+      VNC_GEOMETRY: ${VNC_GEOMETRY}
+      TZ: ${TZ}
+    volumes:
+      - ${VIVADO_DIR}:/tools/Xilinx:${VIVADO_MOUNT_OPTS}
+      - ${XIL_LICENSE_DIR}:/home/${CONTAINER_USER}/.Xilinx
+      - ${WORK_DIR}:/home/${CONTAINER_USER}/work
+    ports:
+      - ${BIND_ADDRESS}:${SSH_PORT}:22
+      - ${BIND_ADDRESS}:${VNC_PORT}:5901
+    restart: unless-stopped

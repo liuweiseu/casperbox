@@ -1,0 +1,9 @@
+#!/bin/sh
+# TigerVNC 会话启动脚本：XFCE 桌面
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XDG_SESSION_TYPE=x11
+
+[ -r "$HOME/.Xresources" ] && xrdb "$HOME/.Xresources"
+
+exec dbus-launch --exit-with-session startxfce4

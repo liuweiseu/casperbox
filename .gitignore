@@ -1,0 +1,5 @@
+# 用户配置（包含本机路径和密码）
+config/user.conf
+
+# casper.sh 生成的文件
+.generated/
