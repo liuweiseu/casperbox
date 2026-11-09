@@ -41,8 +41,9 @@ python -m pip install --no-cache-dir --upgrade pip
 echo ">>> 生成 ${mlib_dir}/startsg.local"
 cat > "${mlib_dir}/startsg.local" <<EOF
 # 由 casper-container 在构建镜像时生成
-export XILINX_PATH=/tools/Xilinx/Vivado/${VIVADO_VERSION}
-export COMPOSER_PATH=/tools/Xilinx/Model_Composer/${VIVADO_VERSION}
+# Vivado 挂载路径与宿主机一致，容器启动时由 entrypoint 写入 /etc/casper/runtime.env
+[ -r /etc/casper/runtime.env ] && . /etc/casper/runtime.env
+export XILINX_PATH COMPOSER_PATH
 export PLATFORM=lin64
 export JASPER_BACKEND=vivado
 export XLNX_DT_REPO_PATH=${dt_dir}

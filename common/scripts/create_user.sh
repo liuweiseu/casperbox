@@ -29,7 +29,6 @@ home_dir="/home/${CONTAINER_USER}"
 # 预先创建挂载点与工作目录，确保属主正确
 mkdir -p "${home_dir}/work" "${home_dir}/.Xilinx" "${home_dir}/toolflow" "${home_dir}/.vnc"
 chown -R "${USER_UID}:${USER_GID}" "${home_dir}"
-mkdir -p /tools/Xilinx
 
 # 非登录 shell（如 VNC 中打开的终端）也加载 toolflow 环境
 cat >> "${home_dir}/.bashrc" <<'EOF'

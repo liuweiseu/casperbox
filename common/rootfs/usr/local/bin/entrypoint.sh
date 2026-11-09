@@ -35,9 +35,28 @@ if [[ ! -f "${home_dir}/.vnc/xstartup" ]]; then
 fi
 unset CONTAINER_PWD VNC_PASSWORD
 
-# ---- 挂载检查（仅提示）----
-[[ -r "/tools/Xilinx/Vivado/${VIVADO_VERSION}/settings64.sh" ]] \
-    || log "警告：未找到 /tools/Xilinx/Vivado/${VIVADO_VERSION}/settings64.sh，请检查 VIVADO_DIR"
+# ---- Vivado 路径（挂载路径与宿主机一致）----
+# 支持两种布局：<VIVADO_DIR>/Vivado/<版本>/settings64.sh 或 <VIVADO_DIR>/settings64.sh
+: "${VIVADO_DIR:?VIVADO_DIR 未设置}"
+xilinx_path=""
+composer_path=""
+if [[ -r "${VIVADO_DIR}/Vivado/${VIVADO_VERSION}/settings64.sh" ]]; then
+    xilinx_path="${VIVADO_DIR}/Vivado/${VIVADO_VERSION}"
+    [[ -d "${VIVADO_DIR}/Model_Composer/${VIVADO_VERSION}" ]] \
+        && composer_path="${VIVADO_DIR}/Model_Composer/${VIVADO_VERSION}"
+elif [[ -r "${VIVADO_DIR}/settings64.sh" ]]; then
+    xilinx_path="${VIVADO_DIR}"
+else
+    log "警告：在 ${VIVADO_DIR} 下未找到 Vivado ${VIVADO_VERSION} 的 settings64.sh，请检查 VIVADO_DIR"
+fi
+log "Vivado: ${xilinx_path:-<未找到>}"
+{
+    echo "# 由 entrypoint 在容器启动时生成"
+    printf "VIVADO_DIR='%s'\n" "${VIVADO_DIR}"
+    printf "XILINX_PATH='%s'\n" "${xilinx_path}"
+    printf "COMPOSER_PATH='%s'\n" "${composer_path}"
+} > /etc/casper/runtime.env
+chmod 644 /etc/casper/runtime.env
 
 # ---- sshd ----
 ssh-keygen -A >/dev/null

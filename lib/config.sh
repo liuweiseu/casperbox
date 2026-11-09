@@ -61,8 +61,19 @@ validate_user_config() {
     WORK_DIR="$(expand_path "${WORK_DIR}")"
 
     [[ -d "${VIVADO_DIR}" ]] || die "VIVADO_DIR 不存在: ${VIVADO_DIR}"
-    [[ -f "${VIVADO_DIR}/Vivado/${VIVADO_VERSION}/settings64.sh" ]] \
-        || log_warn "未找到 ${VIVADO_DIR}/Vivado/${VIVADO_VERSION}/settings64.sh，toolflow ${TOOLFLOW_VERSION} 需要 Vivado ${VIVADO_VERSION}"
+    if [[ ! -f "${VIVADO_DIR}/Vivado/${VIVADO_VERSION}/settings64.sh" && ! -f "${VIVADO_DIR}/settings64.sh" ]]; then
+        log_warn "在 ${VIVADO_DIR} 下未找到 Vivado/${VIVADO_VERSION}/settings64.sh 或 settings64.sh，toolflow ${TOOLFLOW_VERSION} 需要 Vivado ${VIVADO_VERSION}"
+    fi
+    # Vivado 挂载到容器内相同路径，不能覆盖容器的系统目录或 toolflow 目录
+    local protected
+    for protected in /bin /boot /dev /etc /lib /lib64 /proc /root /run /sbin /sys /tmp /usr /var \
+            /opt/conda /opt/scilab /opt/casper "/home/${CONTAINER_USER}" \
+            "/home/${CONTAINER_USER}/work" "/home/${CONTAINER_USER}/.Xilinx" \
+            "/home/${CONTAINER_USER}/toolflow" "/home/${CONTAINER_USER}/.local"; do
+        if [[ "${protected}" == "${VIVADO_DIR}" || "${protected}" == "${VIVADO_DIR}/"* ]]; then
+            die "VIVADO_DIR=${VIVADO_DIR} 会覆盖容器内的 ${protected}，请使用其它路径"
+        fi
+    done
     [[ "${VIVADO_MOUNT_OPTS}" == ro || "${VIVADO_MOUNT_OPTS}" == rw ]] \
         || die "VIVADO_MOUNT_OPTS 只能是 ro 或 rw"
 
@@ -102,7 +113,7 @@ validate_user_config() {
     # ---- 自定义挂载 ----
     local home="/home/${CONTAINER_USER}"
     local -A reserved=(
-        ["/tools/Xilinx"]=1 ["${home}/.Xilinx"]=1 ["${home}/work"]=1
+        ["${VIVADO_DIR}"]=1 ["${home}/.Xilinx"]=1 ["${home}/work"]=1
         ["${home}"]=1 ["${home}/toolflow"]=1
     )
     EXTRA_MOUNT_SPECS=()

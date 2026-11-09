@@ -45,12 +45,14 @@ services:
       - label=disable
     shm_size: ${SHM_SIZE}
     environment:
+      VIVADO_DIR: ${VIVADO_DIR}
       CONTAINER_PWD: ${CONTAINER_PWD}
       VNC_PASSWORD: ${VNC_PASSWORD}
       VNC_GEOMETRY: ${VNC_GEOMETRY}
       TZ: ${TZ}
     volumes:
-      - ${VIVADO_DIR}:/tools/Xilinx:${VIVADO_MOUNT_OPTS}
+      # Vivado 挂载到与宿主机相同的路径
+      - ${VIVADO_DIR}:${VIVADO_DIR}:${VIVADO_MOUNT_OPTS}
       - ${XIL_LICENSE_DIR}:/home/${CONTAINER_USER}/.Xilinx
       - ${WORK_DIR}:/home/${CONTAINER_USER}/work
     ports:

@@ -62,7 +62,7 @@ vi config/user.conf            # 填写 VIVADO_DIR / XIL_LICENSE_DIR / WORK_DIR 
 
 | 宿主机（user.conf） | 容器 |
 |---|---|
-| `VIVADO_DIR` | `/tools/Xilinx`（默认只读） |
+| `VIVADO_DIR` | 与宿主机相同路径（默认只读） |
 | `XIL_LICENSE_DIR` | `~/.Xilinx` |
 | `WORK_DIR` | `~/work` |
 | `EXTRA_MOUNTS`（可选） | 自定义 |

@@ -9,6 +9,9 @@
 set -a
 # shellcheck disable=SC1091
 . /etc/casper/toolflow.env
+# 容器启动时生成：VIVADO_DIR / XILINX_PATH / COMPOSER_PATH
+# shellcheck disable=SC1091
+[ -r /etc/casper/runtime.env ] && . /etc/casper/runtime.env
 set +a
 
 export MLIB_DEVEL_PATH="${CASPER_TOOLFLOW_DIR}/mlib_devel"
@@ -26,8 +29,8 @@ if [ -r "${MLIB_DEVEL_PATH}/startsg.local" ]; then
 fi
 
 # Vivado（只加载一次，避免 PATH 重复增长）
-_casper_vivado_settings="/tools/Xilinx/Vivado/${VIVADO_VERSION}/settings64.sh"
-if [ -z "${CASPER_VIVADO_LOADED:-}" ] && [ -r "${_casper_vivado_settings}" ]; then
+_casper_vivado_settings="${XILINX_PATH:-}/settings64.sh"
+if [ -z "${CASPER_VIVADO_LOADED:-}" ] && [ -n "${XILINX_PATH:-}" ] && [ -r "${_casper_vivado_settings}" ]; then
     # shellcheck disable=SC1090
     . "${_casper_vivado_settings}" >/dev/null
     export CASPER_VIVADO_LOADED=1
