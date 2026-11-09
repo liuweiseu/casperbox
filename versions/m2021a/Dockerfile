@@ -37,6 +37,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # 1. System packages: openssh-server / tigervnc / firefox / desktop / Vivado dependencies
+COPY common/packages/software.list /opt/casper/packages/
 COPY common/scripts/install_base.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/install_base.sh
 

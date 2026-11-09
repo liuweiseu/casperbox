@@ -114,6 +114,7 @@ casper.sh              entry script
 compose.yml            base compose definition (variables from .generated/.env)
 config/                user config
 versions/<ver>/        per-version Dockerfile and toolflow.conf (protected by SHA256SUMS, do not modify)
+common/packages/       software.list: apt packages installed into the image
 common/scripts/        image build scripts
 common/rootfs/         files copied into the image (sshd config, profile, entrypoint)
 common/vnc/xstartup    VNC session script
@@ -126,3 +127,7 @@ tools/                 maintenance tools
 
 1. Copy `versions/m2021a` to `versions/<new version>`, edit `toolflow.conf` (`TOOLFLOW_VERSION` must match the directory name) and adjust the Dockerfile as needed.
 2. Run `tools/update-checksums.sh` to update `versions/SHA256SUMS`.
+
+## Adding apt packages
+
+Add the package name (one per line) to `common/packages/software.list`, then run `./casper.sh build`.

@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
-# Install system packages: openssh-server, tigervnc, firefox, XFCE desktop and Vivado/toolflow dependencies
+# Install the system packages listed in common/packages/software.list
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
+# Package list: one package per line, # starts a comment
+pkg_list="${1:-/opt/casper/packages/software.list}"
+[[ -r "${pkg_list}" ]] || { echo "Error: package list not found: ${pkg_list}" >&2; exit 1; }
+mapfile -t packages < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "${pkg_list}")
+(( ${#packages[@]} > 0 )) || { echo "Error: no packages in ${pkg_list}" >&2; exit 1; }
+echo "Installing ${#packages[@]} packages from ${pkg_list}"
+
 apt-get update
-apt-get install -y --no-install-recommends \
-    ca-certificates curl wget git sudo locales tzdata \
-    bzip2 xz-utils unzip file less vim nano procps psmisc \
-    iproute2 iputils-ping net-tools lsb-release \
-    build-essential make gcc g++ device-tree-compiler \
-    openssh-server \
-    tigervnc-standalone-server tigervnc-common \
-    xfce4 xfce4-terminal dbus-x11 x11-xserver-utils xfonts-base fonts-dejavu \
-    firefox \
-    libtinfo5 libncurses5 libx11-6 libxext6 libxrender1 libxtst6 libxi6 libxft2 \
-    libxrandr2 libxcursor1 libxinerama1 libsm6 libice6 \
-    libfreetype6 libfontconfig1 libglib2.0-0 libgtk2.0-0 libgtk-3-0 \
-    libcanberra-gtk-module libcanberra-gtk3-module \
-    libasound2 libgl1 libglu1-mesa graphviz
+apt-get install -y --no-install-recommends "${packages[@]}"
 
 # locale
 sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen

@@ -1,0 +1,70 @@
+# apt packages installed into the image by common/scripts/install_base.sh
+# One package per line; text after # is ignored.
+
+# ---- basic tools ----
+ca-certificates
+curl
+wget
+git
+sudo
+locales
+tzdata
+bzip2
+xz-utils
+unzip
+file
+less
+vim
+nano
+procps
+psmisc
+iproute2
+iputils-ping
+net-tools
+lsb-release
+
+# ---- build tools ----
+build-essential
+make
+gcc
+g++
+device-tree-compiler
+
+# ---- ssh / vnc / desktop ----
+openssh-server
+tigervnc-standalone-server
+tigervnc-common
+xfce4
+xfce4-terminal
+dbus-x11
+x11-xserver-utils
+x11-utils
+xfonts-base
+fonts-dejavu
+firefox
+
+# ---- Vivado runtime dependencies ----
+libtinfo5
+libncurses5
+libx11-6
+libxext6
+libxrender1
+libxtst6
+libxi6
+libxft2
+libxrandr2
+libxcursor1
+libxinerama1
+libsm6
+libice6
+libfreetype6
+libfontconfig1
+libglib2.0-0
+libgtk2.0-0
+libgtk-3-0
+libcanberra-gtk-module
+libcanberra-gtk3-module
+libasound2
+libgl1
+libglu1-mesa
+graphviz
