@@ -1,5 +1,5 @@
 #!/bin/sh
-# TigerVNC 会话启动脚本：XFCE 桌面
+# TigerVNC session startup: XFCE desktop
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 export XDG_SESSION_TYPE=x11

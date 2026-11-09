@@ -1,11 +1,11 @@
-# CASPER toolflow m2021a 镜像
-# 构建参数由 casper.sh 从 versions/m2021a/toolflow.conf 与 config/user.conf 读取，
-# 经 compose.yml 的 build.args 传入，请勿直接修改默认值来改变版本。
+# CASPER toolflow m2021a image
+# Build args are read by casper.sh from versions/m2021a/toolflow.conf and config/user.conf
+# and passed in via build.args in compose.yml. Do not change the defaults here to switch versions.
 
 ARG BASE_IMAGE=docker.io/library/ubuntu:20.04
 FROM ${BASE_IMAGE}
 
-# ---- toolflow 版本参数（来自 toolflow.conf）----
+# ---- toolflow version args (from toolflow.conf) ----
 ARG TOOLFLOW_VERSION
 ARG VIVADO_VERSION
 ARG MINICONDA_INSTALLER
@@ -19,7 +19,7 @@ ARG GIT_CLONE_DEPTH=1
 ARG SCILAB_VERSION
 ARG SCILAB_URL
 
-# ---- 用户参数（来自 user.conf / 宿主机）----
+# ---- user args (from user.conf / host) ----
 ARG CONTAINER_USER=casper
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -36,15 +36,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# 1. 系统软件：openssh-server / tigervnc / firefox / 桌面 / Vivado 依赖
+# 1. System packages: openssh-server / tigervnc / firefox / desktop / Vivado dependencies
 COPY common/scripts/install_base.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/install_base.sh
 
-# 2. 创建用户（UID/GID 与宿主机一致，配合 userns keep-id）
+# 2. Create the user (UID/GID match the host, for userns keep-id)
 COPY common/scripts/create_user.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/create_user.sh
 
-# 3. Scilab：解压到 /opt/scilab，链接到 ~/.local/bin/scilab（需要用户已创建）
+# 3. Scilab: extract to /opt/scilab, link to ~/.local/bin/scilab (requires the user)
 COPY common/scripts/install_scilab.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/install_scilab.sh
 
@@ -52,14 +52,14 @@ RUN bash /opt/casper/scripts/install_scilab.sh
 COPY common/scripts/install_miniconda.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/install_miniconda.sh
 
-# 5. conda 环境 + mlib_devel（以普通用户身份执行，保证文件属主正确）
+# 5. conda env + mlib_devel (run as the regular user so file ownership is correct)
 COPY common/scripts/setup_conda_env.sh common/scripts/config_mlib_devel.sh /opt/casper/scripts/
 USER ${CONTAINER_USER}
 RUN HOME="/home/${CONTAINER_USER}" bash /opt/casper/scripts/setup_conda_env.sh
 RUN HOME="/home/${CONTAINER_USER}" bash /opt/casper/scripts/config_mlib_devel.sh
 USER root
 
-# 6. 运行时文件：sshd 配置、profile、entrypoint、VNC xstartup
+# 6. Runtime files: sshd config, profile, entrypoint, VNC xstartup
 COPY common/rootfs/ /
 COPY common/vnc/xstartup /opt/casper/vnc/xstartup
 RUN chmod 755 /usr/local/bin/entrypoint.sh /opt/casper/vnc/xstartup \

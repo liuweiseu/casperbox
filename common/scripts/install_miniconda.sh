@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 安装 Miniconda 到 ${CONDA_DIR}（默认 /opt/conda），并把属主交给容器用户
+# Install Miniconda to ${CONDA_DIR} (default /opt/conda) and hand ownership to the container user
 set -euo pipefail
 
-: "${MINICONDA_INSTALLER:?MINICONDA_INSTALLER 未设置}"
-: "${CONTAINER_USER:?CONTAINER_USER 未设置}"
+: "${MINICONDA_INSTALLER:?MINICONDA_INSTALLER is not set}"
+: "${CONTAINER_USER:?CONTAINER_USER is not set}"
 CONDA_DIR="${CONDA_DIR:-/opt/conda}"
 
 tmp_dir="$(mktemp -d)"
@@ -13,7 +13,7 @@ curl -fL --retry 3 -o "${tmp_dir}/miniconda.sh" \
     "https://repo.anaconda.com/miniconda/${MINICONDA_INSTALLER}"
 bash "${tmp_dir}/miniconda.sh" -b -p "${CONDA_DIR}"
 
-# 只使用 conda-forge 频道，避免 Anaconda defaults 频道的服务条款限制
+# Use conda-forge only, avoiding the Terms of Service restrictions of the Anaconda defaults channel
 cat > "${CONDA_DIR}/.condarc" <<'EOF'
 channels:
   - conda-forge
@@ -23,5 +23,5 @@ EOF
 
 "${CONDA_DIR}/bin/conda" clean -afy
 
-# 让容器用户可以自行安装/升级包
+# Let the container user install/upgrade packages
 chown -R "${CONTAINER_USER}:$(id -gn "${CONTAINER_USER}")" "${CONDA_DIR}"

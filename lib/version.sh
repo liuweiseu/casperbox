@@ -1,9 +1,9 @@
 # shellcheck shell=bash
-# toolflow 版本：列出、选择、完整性校验、加载 toolflow.conf
+# toolflow versions: list, select, verify integrity, load toolflow.conf
 
 VERSIONS_DIR="${ROOT_DIR}/versions"
 
-# toolflow.conf 中必须定义的变量
+# Variables that toolflow.conf must define
 TOOLFLOW_KEYS=(
     TOOLFLOW_VERSION BASE_IMAGE VIVADO_VERSION
     MINICONDA_INSTALLER PYTHON_VERSION CONDA_ENV_NAME
@@ -20,19 +20,19 @@ list_versions() {
     done
 }
 
-# 解析版本：参数 > 上次使用的版本(仅 use_last=1 时) > 唯一版本 > 交互选择
+# Resolve version: argument > last used version (only if use_last=1) > the only version > interactive choice
 resolve_version() {
     local requested="$1" use_last="${2:-0}"
     local -a versions
     mapfile -t versions < <(list_versions)
-    (( ${#versions[@]} > 0 )) || die "versions/ 下没有可用的 toolflow 版本"
+    (( ${#versions[@]} > 0 )) || die "No toolflow version available under versions/"
 
     if [[ -n "${requested}" ]]; then
         local v
         for v in "${versions[@]}"; do
             [[ "${v}" == "${requested}" ]] && { echo "${v}"; return; }
         done
-        die "不支持的版本: ${requested}（可用: ${versions[*]}）"
+        die "Unsupported version: ${requested} (available: ${versions[*]})"
     fi
 
     if [[ "${use_last}" == 1 && -f "${STATE_FILE}" ]]; then
@@ -47,24 +47,24 @@ resolve_version() {
         echo "${versions[0]}"; return
     fi
 
-    [[ -t 0 ]] || die "存在多个版本，请在命令行指定版本（可用: ${versions[*]}）"
+    [[ -t 0 ]] || die "Multiple versions available, please specify one on the command line (available: ${versions[*]})"
     local choice
-    PS3="请选择 toolflow 版本: "
+    PS3="Select a toolflow version: "
     select choice in "${versions[@]}"; do
         [[ -n "${choice}" ]] && { echo "${choice}"; return; }
     done
-    die "未选择版本"
+    die "No version selected"
 }
 
-# 校验 versions/<ver>/ 下受保护文件未被修改
+# Verify that the protected files under versions/<ver>/ have not been modified
 verify_version_integrity() {
     local ver="$1" sums="${VERSIONS_DIR}/SHA256SUMS"
-    [[ -f "${sums}" ]] || die "缺少 ${sums}"
+    [[ -f "${sums}" ]] || die "Missing ${sums}"
     local entries
     entries="$(grep -E "^[0-9a-f]{64}  ${ver}/" "${sums}" || true)"
-    [[ -n "${entries}" ]] || die "SHA256SUMS 中没有版本 ${ver} 的校验记录"
+    [[ -n "${entries}" ]] || die "SHA256SUMS has no checksums for version ${ver}"
     if ! (cd "${VERSIONS_DIR}" && sha256sum --quiet -c - <<<"${entries}" >/dev/null 2>&1); then
-        die "versions/${ver} 下的文件已被修改（校验和不匹配）。请恢复原文件；用户配置请修改 config/user.conf"
+        die "Files under versions/${ver} have been modified (checksum mismatch). Please restore them; put user settings in config/user.conf"
     fi
 }
 
@@ -74,8 +74,8 @@ load_toolflow_conf() {
     source "${conf}"
     local k
     for k in "${TOOLFLOW_KEYS[@]}"; do
-        [[ -n "${!k:-}" ]] || die "${conf} 缺少 ${k}"
+        [[ -n "${!k:-}" ]] || die "${conf} is missing ${k}"
     done
     [[ "${TOOLFLOW_VERSION}" == "${ver}" ]] \
-        || die "${conf} 中 TOOLFLOW_VERSION=${TOOLFLOW_VERSION} 与目录名 ${ver} 不一致"
+        || die "TOOLFLOW_VERSION=${TOOLFLOW_VERSION} in ${conf} does not match the directory name ${ver}"
 }

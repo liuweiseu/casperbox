@@ -1,127 +1,128 @@
 # casper-container
 
-用 rootless podman + podman compose 构建并运行 CASPER toolflow 开发容器。
+Build and run a CASPER toolflow development container with rootless podman + podman compose.
 
-镜像包含：openssh-server、TigerVNC（XFCE 桌面）、Firefox、Miniconda（conda 环境）、
-mlib_devel、device-tree-xlnx、Scilab。Vivado 和 license 从宿主机挂载进来。
+The image includes openssh-server, TigerVNC (XFCE desktop), Firefox, Miniconda (conda env),
+mlib_devel, device-tree-xlnx and Scilab. Vivado and the license are mounted from the host.
 
-## 支持的版本
+## Supported versions
 
-| 版本 | 基础镜像 | Vivado | Python | mlib_devel | device-tree-xlnx | Scilab |
+| Version | Base image | Vivado | Python | mlib_devel | device-tree-xlnx | Scilab |
 |---|---|---|---|---|---|---|
 | m2021a | Ubuntu 20.04 | 2021.1 | 3.14 | [liuweiseu/mlib_devel](https://github.com/liuweiseu/mlib_devel) `scilab-dev-ai` | xlnx_rel_v2021.1 | 2024.1.0 |
 
-## 宿主机要求
+## Host requirements
 
-- rootless podman >= 4.4（以普通用户运行）及 passt 软件包（提供 pasta）
-- podman-compose >= 1.1.0（`podman compose` 会被强制使用 podman-compose，docker-compose 不支持 `userns keep-id`）
-- 已安装的 Vivado（版本见上表）和 Xilinx license
+- rootless podman >= 4.4 (run as a regular user) and the passt package (provides pasta)
+- podman-compose >= 1.1.0 (`podman compose` is forced to use podman-compose; docker-compose does not support `userns keep-id`)
+- An installed Vivado (version in the table above) and a Xilinx license
 
-## 宿主机环境配置
+## Host setup
 
-通过 SSH 或桌面直接登录运行 podman 的用户（不要用 `su` 切换），然后执行：
+Log in directly (SSH or desktop) as the user that runs podman (do not switch with `su`), then run:
 
 ```bash
-loginctl enable-linger                      # 保持用户会话，注销后容器不停止
-grep "^$(id -un):" /etc/subuid /etc/subgid  # 应各有一行，否则需管理员分配
+loginctl enable-linger                      # keep the user session so containers survive logout
+grep "^$(id -un):" /etc/subuid /etc/subgid  # should print one line each; otherwise ask an admin
 podman system migrate
-podman info --format '{{.Host.CgroupManager}}'   # 输出 systemd 且无 WARN 即正常
+podman info --format '{{.Host.CgroupManager}}'   # OK if it prints systemd with no WARN
 ```
 
-## 快速开始
+## Quick start
 
 ```bash
 cp config/user.conf.example config/user.conf
-vi config/user.conf            # 填写 VIVADO_DIR / XIL_LICENSE_DIR / WORK_DIR / 端口
+vi config/user.conf            # set VIVADO_DIR / XIL_LICENSE_DIR / WORK_DIR / ports
 
-./casper.sh build              # 构建镜像（只有一个版本时自动选择）
-./casper.sh up                 # 启动容器
+./casper.sh build              # build the image (auto-selected if there is only one version)
+./casper.sh up                 # start the container
 ```
 
-连接：
+Connect:
 
-- SSH：`ssh -p <SSH_PORT> casper@<宿主机>`，密码为 `CONTAINER_PWD`（默认 `casper`）
-- VNC：`<宿主机>:<VNC_PORT>`，密码为 `VNC_PASSWORD`（默认 `casper`）
-- 本机：`./casper.sh shell`
+- SSH: `ssh -p <SSH_PORT> casper@<host>`, password `CONTAINER_PWD` (default `casper`)
+- VNC: `<host>:<VNC_PORT>`, password `VNC_PASSWORD` (default `casper`)
+- Local: `./casper.sh shell`
 
-## 命令
+## Commands
 
-| 命令 | 说明 |
+| Command | Description |
 |---|---|
-| `./casper.sh list` | 列出支持的版本 |
-| `./casper.sh build [版本] [--no-cache]` | 构建镜像 |
-| `./casper.sh up [版本]` | 启动（重建）容器，镜像不存在时自动构建 |
-| `./casper.sh down` | 停止并删除容器 |
-| `./casper.sh restart` | 重启容器 |
-| `./casper.sh shell` | 以容器用户身份进入容器 |
-| `./casper.sh status` / `logs` | 状态 / 日志 |
-| `./casper.sh config` | 查看合并后的 compose 配置（密码已隐藏） |
-| `./casper.sh -c other.conf up` | 使用其它配置文件 |
+| `./casper.sh list` | List supported versions |
+| `./casper.sh build [version] [--no-cache]` | Build the image |
+| `./casper.sh up [version]` | Start (recreate) the container; builds the image if missing |
+| `./casper.sh down` | Stop and remove the container |
+| `./casper.sh restart` | Restart the container |
+| `./casper.sh shell` | Open a shell in the container as the container user |
+| `./casper.sh status` / `logs` | Status / logs |
+| `./casper.sh config` | Show the merged compose config (passwords masked) |
+| `./casper.sh -c other.conf up` | Use another config file |
 
-## 目录与挂载
+## Directories and mounts
 
-| 宿主机（user.conf） | 容器 |
+| Host (user.conf) | Container |
 |---|---|
-| `VIVADO_DIR` | 与宿主机相同路径（默认只读） |
+| `VIVADO_DIR` | Same path as on the host (read-only by default) |
 | `XIL_LICENSE_DIR` | `~/.Xilinx` |
 | `WORK_DIR` | `~/work` |
-| `EXTRA_MOUNTS`（可选） | 自定义 |
+| `EXTRA_MOUNTS` (optional) | User-defined |
 
-容器内的 toolflow 位于 `~/toolflow`：
+The toolflow lives in `~/toolflow` inside the container:
 
 ```
 ~/toolflow/
-├── mlib_devel/            # 含自动生成的 startsg.local
+├── mlib_devel/            # includes the generated startsg.local
 ├── device-tree-xlnx/
-└── src/                   # requirements.txt 中以 -e 安装的依赖
+└── src/                   # -e dependencies from requirements.txt
 ```
 
-登录 shell 会自动加载 Vivado `settings64.sh`、`startsg.local` 中的变量，并激活 conda 环境 `casper`。
+Shells automatically load Vivado `settings64.sh` and the variables in `startsg.local`, and activate the conda env `casper`.
 
-Scilab 解压在 `/opt/scilab`，可执行文件链接为 `~/.local/bin/scilab`（`~/.local/bin` 已加入 PATH），
-直接运行 `scilab` 即可。
+Scilab is extracted to `/opt/scilab` and linked as `~/.local/bin/scilab` (`~/.local/bin` is on PATH),
+so just run `scilab`.
 
-> 注意：`~/toolflow` 存在于镜像中，不是挂载目录。`down`/`up` 会重建容器，对其所做的修改会丢失，
-> 请把工程放在 `~/work` 下。
+> Note: `~/toolflow` is part of the image, not a mount. `down`/`up` recreate the container and
+> discard changes made there; keep your projects under `~/work`.
 
-## 网络（pasta）
+## Networking (pasta)
 
-容器使用 rootless podman 的 pasta 网络模式（`network_mode: pasta:...`），不创建 bridge 网络：
+The container uses rootless podman's pasta network mode (`network_mode: pasta:...`); no bridge network is created:
 
-- SSH / VNC / `EXTRA_PORTS` 端口仍通过 `-p` 转发，由 podman 交给 pasta 处理；
-- 容器内网卡固定命名为 `eth0`（pasta 默认会沿用宿主机网卡名）；
-- 容器内看到的 IP 与宿主机相同。
+- SSH / VNC / `EXTRA_PORTS` are still forwarded with `-p`; podman hands them to pasta;
+- the container interface is named `eth0` (pasta would otherwise reuse the host interface name);
+- the container sees the same IP as the host.
 
-### 固定 MAC 地址
+### Fixed MAC address
 
-在 `user.conf` 中设置 `CONTAINER_MAC=xx:xx:xx:xx:xx:xx`，脚本会通过 pasta 的 `--ns-mac-addr`
-把它设置到容器的 `eth0` 上，可用于绑定 MAC 的 Xilinx node-locked license。留空则随机分配。
+Set `CONTAINER_MAC=xx:xx:xx:xx:xx:xx` in `user.conf` and the script applies it to the container's
+`eth0` via pasta's `--ns-mac-addr`, e.g. for a MAC-locked Xilinx node-locked license. Leave empty for a random one.
 
-> pasta 的网卡只存在于容器自己的网络命名空间中，因此使用与宿主机物理网卡相同的 MAC 不会与局域网冲突。
+> The pasta interface exists only in the container's own network namespace, so reusing the MAC of
+> the host's physical NIC does not cause conflicts on the LAN.
 
-## 修改配置后需要做什么
+## After changing the config
 
-| 修改项 | 操作 |
+| Change | Action |
 |---|---|
-| 目录、端口、密码、`CONTAINER_MAC`、`EXTRA_*` | `./casper.sh up` |
-| `CONTAINER_USER`，或换了宿主机用户（UID/GID 变化） | `./casper.sh build` 后 `./casper.sh up` |
+| Directories, ports, passwords, `CONTAINER_MAC`, `EXTRA_*` | `./casper.sh up` |
+| `CONTAINER_USER`, or a different host user (UID/GID changed) | `./casper.sh build`, then `./casper.sh up` |
 
-## 仓库结构
+## Repository layout
 
 ```
-casper.sh              入口脚本
-compose.yml            基础 compose 定义（变量来自 .generated/.env）
-config/                用户配置
-versions/<ver>/        各版本 Dockerfile 与 toolflow.conf（受 SHA256SUMS 保护，用户不要修改）
-common/scripts/        镜像构建脚本
-common/rootfs/         拷贝进镜像的文件（sshd 配置、profile、entrypoint）
-common/vnc/xstartup    VNC 会话脚本
-lib/                   casper.sh 的函数库
-tools/                 维护工具
-.generated/            运行时生成的 .env 与 compose.override.yml
+casper.sh              entry script
+compose.yml            base compose definition (variables from .generated/.env)
+config/                user config
+versions/<ver>/        per-version Dockerfile and toolflow.conf (protected by SHA256SUMS, do not modify)
+common/scripts/        image build scripts
+common/rootfs/         files copied into the image (sshd config, profile, entrypoint)
+common/vnc/xstartup    VNC session script
+lib/                   function library for casper.sh
+tools/                 maintenance tools
+.generated/            generated .env and compose.override.yml
 ```
 
-## 维护者：添加新版本
+## Maintainers: adding a version
 
-1. 复制 `versions/m2021a` 为 `versions/<新版本>`，修改 `toolflow.conf`（`TOOLFLOW_VERSION` 必须与目录名一致），按需调整 Dockerfile。
-2. 执行 `tools/update-checksums.sh` 更新 `versions/SHA256SUMS`。
+1. Copy `versions/m2021a` to `versions/<new version>`, edit `toolflow.conf` (`TOOLFLOW_VERSION` must match the directory name) and adjust the Dockerfile as needed.
+2. Run `tools/update-checksums.sh` to update `versions/SHA256SUMS`.

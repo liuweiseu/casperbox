@@ -1,49 +1,49 @@
 # =============================================================================
-# casper-container 用户配置
+# casper-container user configuration
 #
-# 使用方法：cp config/user.conf.example config/user.conf，然后修改 user.conf。
-# 本文件为 bash 语法，路径中的 ~ 会展开为宿主机 $HOME，相对路径相对于仓库根目录。
+# Usage: cp config/user.conf.example config/user.conf, then edit user.conf.
+# Bash syntax. ~ in paths expands to the host $HOME; relative paths are relative to the repo root.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# 必需目录（宿主机路径）
+# Required directories (host paths)
 # -----------------------------------------------------------------------------
-# Vivado 安装目录，挂载到容器内相同路径
-# 可以是 Xilinx 安装根目录（其下有 Vivado/<版本>/settings64.sh），
-# 也可以直接是 Vivado 目录（其下有 settings64.sh）
+# Vivado install directory, mounted at the same path in the container.
+# Either the Xilinx install root (containing Vivado/<version>/settings64.sh)
+# or the Vivado directory itself (containing settings64.sh).
 VIVADO_DIR=/tools/Xilinx
-# Vivado 挂载方式：ro（只读，推荐）或 rw
+# Vivado mount mode: ro (read-only, recommended) or rw
 VIVADO_MOUNT_OPTS=ro
 
-# Xilinx license 目录，挂载到容器 ~/.Xilinx
+# Xilinx license directory, mounted at ~/.Xilinx in the container
 XIL_LICENSE_DIR=~/.Xilinx
 
-# 工作目录，挂载到容器 ~/work（不存在时自动创建）
+# Work directory, mounted at ~/work in the container (created if missing)
 WORK_DIR=~/casper_work
 
 # -----------------------------------------------------------------------------
-# 必需端口（宿主机端口）
+# Required ports (host ports)
 # -----------------------------------------------------------------------------
-SSH_PORT=2222        # -> 容器 22
-VNC_PORT=5901        # -> 容器 5901
+SSH_PORT=2222        # -> container 22
+VNC_PORT=5901        # -> container 5901
 
-# 端口绑定地址：0.0.0.0 允许其它机器访问，127.0.0.1 仅本机访问
+# Bind address: 0.0.0.0 allows access from other machines, 127.0.0.1 is local only
 BIND_ADDRESS=0.0.0.0
 
 # -----------------------------------------------------------------------------
-# 账户
+# Accounts
 # -----------------------------------------------------------------------------
-# 容器用户名（修改后需要重新 build）
+# Container user name (rebuild after changing)
 CONTAINER_USER=casper
-# SSH 登录密码（同时也是 sudo 密码），启动时设置，修改后重新 up 即可
+# SSH login password (also the sudo password), applied at startup; just run up again after changing
 CONTAINER_PWD=casper
-# VNC 密码（6~8 位，超过 8 位只有前 8 位有效）
+# VNC password (6-8 characters; only the first 8 are used)
 VNC_PASSWORD=casper
 
 # -----------------------------------------------------------------------------
-# 可选：用户自定义挂载
-# 格式："宿主机路径:容器路径[:选项]"，选项可为 ro / rw
-# 容器路径可用 ~/ 表示容器用户的根目录
+# Optional: extra mounts
+# Format: "host_path:container_path[:option]", option is ro / rw
+# In the container path, ~/ means the container user's home directory
 # -----------------------------------------------------------------------------
 EXTRA_MOUNTS=(
     # "~/datasets:~/datasets:ro"
@@ -51,25 +51,25 @@ EXTRA_MOUNTS=(
 )
 
 # -----------------------------------------------------------------------------
-# 可选：用户自定义端口
-# 格式："宿主机端口:容器端口[/tcp|/udp]"
+# Optional: extra ports
+# Format: "host_port:container_port[/tcp|/udp]"
 # -----------------------------------------------------------------------------
 EXTRA_PORTS=(
     # "8888:8888"
 )
 
 # -----------------------------------------------------------------------------
-# 可选：容器网卡 (eth0) 的 MAC 地址
-# 容器使用 pasta 网络，MAC 通过 pasta 的 --ns-mac-addr 设置。
-# 例如使用绑定 MAC 的 Xilinx node-locked license 时，填写 license 对应的 MAC。
-# 格式 xx:xx:xx:xx:xx:xx，留空则随机分配。
+# Optional: MAC address of the container interface (eth0)
+# The container uses pasta networking; the MAC is set via pasta's --ns-mac-addr.
+# E.g. for a MAC-locked Xilinx node-locked license, set the MAC from the license.
+# Format xx:xx:xx:xx:xx:xx; leave empty for a random one.
 # -----------------------------------------------------------------------------
 CONTAINER_MAC=
 
 # -----------------------------------------------------------------------------
-# 其它（一般无需修改）
+# Misc (usually no need to change)
 # -----------------------------------------------------------------------------
-# 容器名，留空则为 casper-<版本>
+# Container name; empty means casper-<version>
 CONTAINER_NAME=
 VNC_GEOMETRY=1920x1080
 SHM_SIZE=2g

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 安装系统软件：openssh-server、tigervnc、firefox、XFCE 桌面以及 Vivado/toolflow 依赖
+# Install system packages: openssh-server, tigervnc, firefox, XFCE desktop and Vivado/toolflow dependencies
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
@@ -25,7 +25,7 @@ sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen
 locale-gen
 update-locale LANG=en_US.UTF-8
 
-# sshd：容器内没有 auditd，pam_loginuid 设为 optional 以避免登录失败
+# sshd: no auditd in the container, make pam_loginuid optional to avoid login failures
 mkdir -p /run/sshd
 sed -i 's/^\(session\s\+\)required\(\s\+pam_loginuid.so\)/\1optional\2/' /etc/pam.d/sshd
 

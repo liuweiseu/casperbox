@@ -1,34 +1,34 @@
 # shellcheck shell=bash
-# CASPER toolflow 环境：Vivado、mlib_devel(startsg.local)、conda 环境
-# 由 /etc/profile（登录 shell）和 ~/.bashrc（交互 shell）加载，可重复加载。
+# CASPER toolflow environment: Vivado, mlib_devel (startsg.local), conda env
+# Sourced by /etc/profile (login shells) and ~/.bashrc (interactive shells); safe to source repeatedly.
 
-# Vivado settings64.sh 等依赖 bash
+# Vivado settings64.sh etc. require bash
 [ -n "${BASH_VERSION:-}" ] || return 0
 [ -r /etc/casper/toolflow.env ] || return 0
 
 set -a
 # shellcheck disable=SC1091
 . /etc/casper/toolflow.env
-# 容器启动时生成：VIVADO_DIR / XILINX_PATH / COMPOSER_PATH
+# Generated at container startup: VIVADO_DIR / XILINX_PATH / COMPOSER_PATH
 # shellcheck disable=SC1091
 [ -r /etc/casper/runtime.env ] && . /etc/casper/runtime.env
 set +a
 
 export MLIB_DEVEL_PATH="${CASPER_TOOLFLOW_DIR}/mlib_devel"
 
-# ~/.local/bin（scilab 等链接在此）
+# ~/.local/bin (scilab etc. are linked here)
 case ":${PATH}:" in
     *":${HOME}/.local/bin:"*) ;;
     *) export PATH="${HOME}/.local/bin:${PATH}" ;;
 esac
 
-# mlib_devel 本地配置（XILINX_PATH / JASPER_BACKEND / XLNX_DT_REPO_PATH 等）
+# mlib_devel local config (XILINX_PATH / JASPER_BACKEND / XLNX_DT_REPO_PATH etc.)
 if [ -r "${MLIB_DEVEL_PATH}/startsg.local" ]; then
     # shellcheck disable=SC1091
     . "${MLIB_DEVEL_PATH}/startsg.local"
 fi
 
-# Vivado（只加载一次，避免 PATH 重复增长）
+# Vivado (load once to avoid growing PATH repeatedly)
 _casper_vivado_settings="${XILINX_PATH:-}/settings64.sh"
 if [ -z "${CASPER_VIVADO_LOADED:-}" ] && [ -n "${XILINX_PATH:-}" ] && [ -r "${_casper_vivado_settings}" ]; then
     # shellcheck disable=SC1090
@@ -37,10 +37,10 @@ if [ -z "${CASPER_VIVADO_LOADED:-}" ] && [ -n "${XILINX_PATH:-}" ] && [ -r "${_c
 fi
 unset _casper_vivado_settings
 
-# conda：默认激活 toolflow 的 python 环境（CONDA_ENV_NAME，例如 casper）
-# 每个 shell 都要定义 conda 函数并执行 activate：
-#   - 环境变量会从父进程继承，但 conda 函数和提示符 PS1 不会；
-#   - 环境已激活时 conda 只做 reactivate，不会重复叠加，同时恢复 "(casper)" 提示符。
+# conda: activate the toolflow python env by default (CONDA_ENV_NAME, e.g. casper)
+# Every shell must define the conda function and run activate:
+#   - environment variables are inherited from the parent, but the conda function and PS1 are not;
+#   - if the env is already active, conda only reactivates (no stacking) and restores the "(casper)" prompt.
 if [ -r /opt/conda/etc/profile.d/conda.sh ]; then
     # shellcheck disable=SC1091
     . /opt/conda/etc/profile.d/conda.sh

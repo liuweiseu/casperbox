@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# casper-container 入口脚本：构建镜像、启动/停止容器
+# casper-container entry script: build images, start/stop containers
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -18,39 +18,39 @@ source "${ROOT_DIR}/lib/compose_gen.sh"
 
 usage() {
     cat <<EOF
-用法: $(basename "$0") [-c 配置文件] <命令> [版本] [选项]
+Usage: $(basename "$0") [-c CONFIG] <command> [version] [options]
 
-命令:
-  list                 列出支持的 toolflow 版本
-  build [版本]         构建镜像（选项 --no-cache）
-  up [版本]            启动容器（镜像不存在时自动构建）
-  down [版本]          停止并删除容器
-  restart [版本]       重启容器（重新读取 user.conf）
-  shell [版本]         以容器用户身份进入容器
-  status [版本]        查看容器状态
-  logs [版本]          查看容器日志
-  config [版本]        显示生成的 compose 配置（隐藏密码）
+Commands:
+  list                 List supported toolflow versions
+  build [version]      Build the image (option: --no-cache)
+  up [version]         Start the container (builds the image if missing)
+  down [version]       Stop and remove the container
+  restart [version]    Restart the container (re-reads user.conf)
+  shell [version]      Open a shell in the container as the container user
+  status [version]     Show container status
+  logs [version]       Follow container logs
+  config [version]     Show the generated compose config (passwords masked)
 
-选项:
-  -c, --config FILE    指定用户配置文件（默认 config/user.conf，也可用环境变量 CASPER_CONFIG）
-  -h, --help           显示帮助
+Options:
+  -c, --config FILE    User config file (default: config/user.conf, or env CASPER_CONFIG)
+  -h, --help           Show this help
 
-未指定版本时：build/up 只有一个版本则自动选择，否则交互选择；
-其它命令使用上一次 build/up 的版本。
+When no version is given: build/up pick the only version automatically, or
+prompt if there are several; other commands use the version of the last build/up.
 EOF
 }
 
-# 解析版本、加载并校验配置、生成 compose 文件
+# Resolve the version, load and validate config, generate compose files
 prepare() {
     local requested="$1" use_last="$2" ver
     ver="$(resolve_version "${requested}" "${use_last}")"
     verify_version_integrity "${ver}"
     load_user_config
-    load_toolflow_conf "${ver}"   # 后加载，保证版本参数不会被 user.conf 覆盖
+    load_toolflow_conf "${ver}"   # loaded last so user.conf cannot override version settings
 
     HOST_UID="$(id -u)"
     HOST_GID="$(id -g)"
-    (( HOST_UID != 0 )) || die "请不要以 root 运行，使用普通用户 + rootless podman"
+    (( HOST_UID != 0 )) || die "Do not run as root; use a regular user with rootless podman"
 
     validate_user_config
     IMAGE_NAME="casper-toolflow:${TOOLFLOW_VERSION}"
@@ -59,7 +59,7 @@ prepare() {
     generate_env_file
     generate_override_file
     save_state
-    log_info "toolflow 版本: ${TOOLFLOW_VERSION}，镜像: ${IMAGE_NAME}，容器: ${CONTAINER_NAME}"
+    log_info "toolflow version: ${TOOLFLOW_VERSION}, image: ${IMAGE_NAME}, container: ${CONTAINER_NAME}"
 }
 
 compose() {
@@ -75,14 +75,14 @@ image_label() {
     podman image inspect --format "{{index .Labels \"$1\"}}" "${IMAGE_NAME}" 2>/dev/null || true
 }
 
-# 镜像中的用户必须与当前配置一致，否则挂载目录权限会出错
+# The image user must match the current config, otherwise mounted directories get wrong permissions
 check_image_matches() {
     local img_user img_uid img_gid
     img_user="$(image_label casper.user)"
     img_uid="$(image_label casper.uid)"
     img_gid="$(image_label casper.gid)"
     if [[ "${img_user}" != "${CONTAINER_USER}" || "${img_uid}" != "${HOST_UID}" || "${img_gid}" != "${HOST_GID}" ]]; then
-        die "镜像 ${IMAGE_NAME} 的用户(${img_user} ${img_uid}:${img_gid}) 与当前配置(${CONTAINER_USER} ${HOST_UID}:${HOST_GID}) 不一致，请执行: $0 build ${TOOLFLOW_VERSION}"
+        die "User in image ${IMAGE_NAME} (${img_user} ${img_uid}:${img_gid}) does not match the current config (${CONTAINER_USER} ${HOST_UID}:${HOST_GID}); please run: $0 build ${TOOLFLOW_VERSION}"
     fi
 }
 
@@ -91,15 +91,15 @@ cmd_build() {
     while (( $# )); do
         case "$1" in
             --no-cache) args+=(--no-cache) ;;
-            -*) die "未知选项: $1" ;;
+            -*) die "Unknown option: $1" ;;
             *) ver="$1" ;;
         esac
         shift
     done
     prepare "${ver}" 0
-    log_info "开始构建镜像 ${IMAGE_NAME}（首次构建需要下载较多内容，请耐心等待）"
+    log_info "Building image ${IMAGE_NAME} (the first build downloads a lot, please be patient)"
     compose build "${args[@]}" casper
-    log_info "镜像构建完成: ${IMAGE_NAME}"
+    log_info "Image built: ${IMAGE_NAME}"
 }
 
 print_access_info() {
@@ -107,25 +107,25 @@ print_access_info() {
     [[ "${BIND_ADDRESS}" != "0.0.0.0" ]] && host="${BIND_ADDRESS}"
     cat <<EOF
 
-容器 ${CONTAINER_NAME} 已启动
-  SSH : ssh -p ${SSH_PORT} ${CONTAINER_USER}@${host}
-  VNC : ${host}:${VNC_PORT}
-  进入: $0 shell
+Container ${CONTAINER_NAME} is up
+  SSH  : ssh -p ${SSH_PORT} ${CONTAINER_USER}@${host}
+  VNC  : ${host}:${VNC_PORT}
+  Shell: $0 shell
 EOF
     local s
     for s in "${EXTRA_PORT_SPECS[@]}"; do
-        echo "  端口: ${s#"${BIND_ADDRESS}:"}"
+        echo "  Port : ${s#"${BIND_ADDRESS}:"}"
     done
 }
 
 cmd_up() {
     prepare "${1:-}" 0
     if ! podman image exists "${IMAGE_NAME}"; then
-        log_info "镜像 ${IMAGE_NAME} 不存在，开始构建"
+        log_info "Image ${IMAGE_NAME} not found, building it"
         compose build casper
     fi
     check_image_matches
-    # 重新创建容器，使 user.conf 的修改生效
+    # Recreate the container so that changes in user.conf take effect
     compose up -d --force-recreate
     print_access_info
 }
@@ -137,7 +137,7 @@ cmd_down() {
 
 cmd_shell() {
     prepare "${1:-}" 1
-    podman container exists "${CONTAINER_NAME}" || die "容器 ${CONTAINER_NAME} 不存在，请先执行: $0 up"
+    podman container exists "${CONTAINER_NAME}" || die "Container ${CONTAINER_NAME} does not exist, please run: $0 up"
     exec podman exec -it -u "${CONTAINER_USER}" -w "/home/${CONTAINER_USER}" "${CONTAINER_NAME}" bash -l
 }
 
@@ -161,7 +161,7 @@ main() {
     while (( $# )); do
         case "$1" in
             -c|--config)
-                [[ -n "${2:-}" ]] || die "$1 需要参数"
+                [[ -n "${2:-}" ]] || die "$1 requires an argument"
                 USER_CONF="$(realpath -m -- "$2")"; shift 2 ;;
             -h|--help) usage; exit 0 ;;
             *) break ;;
@@ -187,7 +187,7 @@ main() {
         status)  cmd_status "$@" ;;
         logs)    cmd_logs "$@" ;;
         config)  cmd_config "$@" ;;
-        *) usage; die "未知命令: ${cmd}" ;;
+        *) usage; die "Unknown command: ${cmd}" ;;
     esac
 }
 
