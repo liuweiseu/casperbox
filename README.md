@@ -9,13 +9,24 @@ mlib_devel、device-tree-xlnx、Scilab。Vivado 和 license 从宿主机挂载�
 
 | 版本 | 基础镜像 | Vivado | Python | mlib_devel | device-tree-xlnx | Scilab |
 |---|---|---|---|---|---|---|
-| m2021a | Ubuntu 20.04 | 2021.1 | 3.8 | m2021a | xlnx_rel_v2021.1 | 6.1.1 |
+| m2021a | Ubuntu 20.04 | 2021.1 | 3.14 | [liuweiseu/mlib_devel](https://github.com/liuweiseu/mlib_devel) `scilab-dev-ai` | xlnx_rel_v2021.1 | 2024.1.0 |
 
 ## 宿主机要求
 
 - rootless podman >= 4.4（以普通用户运行）及 passt 软件包（提供 pasta）
 - podman-compose >= 1.1.0（`podman compose` 会被强制使用 podman-compose，docker-compose 不支持 `userns keep-id`）
 - 已安装的 Vivado（版本见上表）和 Xilinx license
+
+## 宿主机环境配置
+
+通过 SSH 或桌面直接登录运行 podman 的用户（不要用 `su` 切换），然后执行：
+
+```bash
+loginctl enable-linger                      # 保持用户会话，注销后容器不停止
+grep "^$(id -un):" /etc/subuid /etc/subgid  # 应各有一行，否则需管理员分配
+podman system migrate
+podman info --format '{{.Host.CgroupManager}}'   # 输出 systemd 且无 WARN 即正常
+```
 
 ## 快速开始
 
