@@ -1,0 +1,32 @@
+# CASPER toolflow m2021a version definition
+#
+# Managed by the maintainers and shipped with the casper tool; users do not edit it.
+# Every key is passed to the Dockerfile as a build arg of the same name.
+
+TOOLFLOW_VERSION = "m2021a"
+
+# Base image (fully qualified name to avoid podman short-name prompts)
+BASE_IMAGE = "docker.io/library/ubuntu:20.04"
+
+# Vivado version: vivado.dir must contain Vivado/<VIVADO_VERSION>/settings64.sh
+VIVADO_VERSION = "2021.1"
+
+# Python / conda
+MINICONDA_INSTALLER = "Miniconda3-latest-Linux-x86_64.sh"
+PYTHON_VERSION = "3.14"
+CONDA_ENV_NAME = "casper"
+
+# mlib_devel
+MLIB_DEVEL_REPO = "https://github.com/liuweiseu/mlib_devel.git"
+MLIB_DEVEL_BRANCH = "scilab-dev-ai"
+
+# device-tree-xlnx (used by mlib_devel via XLNX_DT_REPO_PATH)
+DEVICE_TREE_XLNX_REPO = "https://github.com/Xilinx/device-tree-xlnx.git"
+DEVICE_TREE_XLNX_BRANCH = "xlnx_rel_v2021.1"
+
+# git clone depth (0 = full history)
+GIT_CLONE_DEPTH = "1"
+
+# Scilab
+SCILAB_VERSION = "2024.1.0"
+SCILAB_URL = "https://www.scilab.org/download/2024.1.0/scilab-2024.1.0.bin.x86_64-linux-gnu.tar.xz"

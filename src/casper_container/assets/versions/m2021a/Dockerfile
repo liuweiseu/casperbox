@@ -1,11 +1,12 @@
 # CASPER toolflow m2021a image
-# Build args are read by casper.sh from versions/m2021a/toolflow.conf and config/user.conf
-# and passed in via build.args in compose.yml. Do not change the defaults here to switch versions.
+# Built by `casper build`: build args come from versions/m2021a/toolflow.toml and the
+# user's casper.toml; the build context is the package's assets/ directory.
+# Do not change the defaults here to switch versions.
 
 ARG BASE_IMAGE=docker.io/library/ubuntu:20.04
 FROM ${BASE_IMAGE}
 
-# ---- toolflow version args (from toolflow.conf) ----
+# ---- toolflow version args (from toolflow.toml) ----
 ARG TOOLFLOW_VERSION
 ARG VIVADO_VERSION
 ARG MINICONDA_INSTALLER
@@ -19,7 +20,7 @@ ARG GIT_CLONE_DEPTH=1
 ARG SCILAB_VERSION
 ARG SCILAB_URL
 
-# ---- user args (from user.conf / host) ----
+# ---- user args (from casper.toml / host) ----
 ARG CONTAINER_USER=casper
 ARG USER_UID=1000
 ARG USER_GID=1000

@@ -1,6 +1,6 @@
 # casper-container
 
-Build and run a CASPER toolflow development container with rootless podman + podman compose.
+`casper` builds and runs CASPER toolflow development containers with rootless podman.
 
 The image includes openssh-server, TigerVNC (XFCE desktop), Firefox, Miniconda (conda env),
 mlib_devel, device-tree-xlnx and Scilab. Vivado and the license are mounted from the host.
@@ -13,8 +13,8 @@ mlib_devel, device-tree-xlnx and Scilab. Vivado and the license are mounted from
 
 ## Host requirements
 
+- [uv](https://docs.astral.sh/uv/) (installs without sudo)
 - rootless podman >= 4.4 (run as a regular user) and the passt package (provides pasta)
-- podman-compose >= 1.1.0 (`podman compose` is forced to use podman-compose; docker-compose does not support `userns keep-id`)
 - An installed Vivado (version in the table above) and a Xilinx license
 
 ## Host setup
@@ -28,46 +28,87 @@ podman system migrate
 podman info --format '{{.Host.CgroupManager}}'   # OK if it prints systemd with no WARN
 ```
 
+## Install
+
+```bash
+uv tool install git+https://github.com/<owner>/casper-container
+# or from a local clone
+uv tool install ./casper-container
+```
+
+Upgrade with `uv tool upgrade casper-container`.
+
 ## Quick start
 
 ```bash
-cp config/user.conf.example config/user.conf
-vi config/user.conf            # set VIVADO_DIR / XIL_LICENSE_DIR / WORK_DIR / ports
-
-./casper.sh build              # build the image (auto-selected if there is only one version)
-./casper.sh up                 # start the container
+mkdir ~/casper-a && cd ~/casper-a
+casper init                    # creates casper.toml
+vi casper.toml                 # set vivado.dir / paths.license_dir / ports
+casper up                      # builds the image on first use, then starts the container
 ```
 
 Connect:
 
-- SSH: `ssh -p <SSH_PORT> casper@<host>`, password `CONTAINER_PWD` (default `casper`)
-- VNC: `<host>:<VNC_PORT>`, password `VNC_PASSWORD` (default `casper`)
-- Local: `./casper.sh shell`
+- SSH: `ssh -p <ports.ssh> casper@<host>`, password `container.password` (default `casper`)
+- VNC: `<host>:<ports.vnc>`, password `container.vnc_password` (default `casper`)
+- Local: `casper shell`
+
+## Configuration
+
+`casper init` writes a commented `casper.toml` (permissions 600, it holds passwords).
+Relative paths in it are relative to the file's directory.
+
+| Key | Default | Description |
+|---|---|---|
+| `version` | | Toolflow version (`casper list`) |
+| `container.name` | `casper-<version>` | Container name and hostname |
+| `container.user` | `casper` | Container user |
+| `container.password` / `vnc_password` | `casper` | SSH/sudo and VNC (6-8 chars) passwords |
+| `container.mac` | random | MAC of `eth0` |
+| `container.shm_size` / `tz` | `2g` / `UTC` | |
+| `vivado.dir` / `vivado.mount` | / `ro` | Vivado install, mounted at the same path |
+| `paths.license_dir` | `~/.Xilinx` | Mounted at `~/.Xilinx` |
+| `paths.work_dir` | `./work` | Mounted at `~/work` (created if missing) |
+| `ports.bind_address` | `0.0.0.0` | |
+| `ports.ssh` / `ports.vnc` | `2222` / `5901` | Host ports for container 22 / 5901 |
+| `vnc.geometry` | `1920x1080` | |
+| `[[mounts]]` | | Extra mounts: `host`, `container` (`~/` = home), `mode` |
+| `[[extra_ports]]` | | Extra ports: `host`, `container`, `protocol` |
+
+Unknown keys and wrong types (e.g. a port written as a string) are reported as errors.
+
+### Several containers
+
+Each config file is one container. Use another directory or file, and give it its own
+`container.name` and ports:
+
+```bash
+casper init lab.toml           # edit container.name, ports.ssh, ports.vnc
+casper -c lab.toml up
+casper ps                      # all casper containers, from any directory
+```
+
+`casper` refuses to recreate or remove a container that was created from a different config file.
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `./casper.sh list` | List supported versions |
-| `./casper.sh build [version] [--no-cache]` | Build the image |
-| `./casper.sh up [version]` | Start (recreate) the container; builds the image if missing |
-| `./casper.sh down` | Stop and remove the container |
-| `./casper.sh restart` | Restart the container |
-| `./casper.sh shell` | Open a shell in the container as the container user |
-| `./casper.sh status` / `logs` | Status / logs |
-| `./casper.sh config` | Show the merged compose config (passwords masked) |
-| `./casper.sh -c other.conf up` | Use another config file |
+| `casper list` | List supported toolflow versions |
+| `casper init [FILE] [--toolflow VER] [--force]` | Create a config file (default `casper.toml`) |
+| `casper build [--no-cache]` | Build the image |
+| `casper up` | Start (recreate) the container; builds the image if missing |
+| `casper down` | Stop and remove the container |
+| `casper restart` | `down` + `up` |
+| `casper shell` | Open a login shell as the container user |
+| `casper status` | Container status and ports |
+| `casper logs [-f]` | Container logs |
+| `casper config` | Resolved config and podman commands (passwords masked) |
+| `casper ps` | List all casper containers |
 
-## Directories and mounts
+`-c FILE` selects the config file (before or after the command); the default is `./casper.toml`.
 
-| Host (user.conf) | Container |
-|---|---|
-| `VIVADO_DIR` | Same path as on the host (read-only by default) |
-| `XIL_LICENSE_DIR` | `~/.Xilinx` |
-| `WORK_DIR` | `~/work` |
-| `EXTRA_MOUNTS` (optional) | User-defined |
-
-The toolflow lives in `~/toolflow` inside the container:
+## Inside the container
 
 ```
 ~/toolflow/
@@ -77,57 +118,48 @@ The toolflow lives in `~/toolflow` inside the container:
 ```
 
 Shells automatically load Vivado `settings64.sh` and the variables in `startsg.local`, and activate the conda env `casper`.
+Scilab is in `/opt/scilab`; run `scilab` (linked in `~/.local/bin`).
 
-Scilab is extracted to `/opt/scilab` and linked as `~/.local/bin/scilab` (`~/.local/bin` is on PATH),
-so just run `scilab`.
-
-> Note: `~/toolflow` is part of the image, not a mount. `down`/`up` recreate the container and
+> `~/toolflow` is part of the image, not a mount. `down`/`up` recreate the container and
 > discard changes made there; keep your projects under `~/work`.
 
 ## Networking (pasta)
 
-The container uses rootless podman's pasta network mode (`network_mode: pasta:...`); no bridge network is created:
-
-- SSH / VNC / `EXTRA_PORTS` are still forwarded with `-p`; podman hands them to pasta;
-- the container interface is named `eth0` (pasta would otherwise reuse the host interface name);
-- the container sees the same IP as the host.
-
-### Fixed MAC address
-
-Set `CONTAINER_MAC=xx:xx:xx:xx:xx:xx` in `user.conf` and the script applies it to the container's
-`eth0` via pasta's `--ns-mac-addr`, e.g. for a MAC-locked Xilinx node-locked license. Leave empty for a random one.
-
-> The pasta interface exists only in the container's own network namespace, so reusing the MAC of
-> the host's physical NIC does not cause conflicts on the LAN.
+The container uses pasta networking (no bridge network). Ports are forwarded with `-p`,
+the interface is named `eth0`, and the container sees the same IP as the host.
+`container.mac` is applied with pasta's `--ns-mac-addr` (e.g. for a MAC-locked node-locked license);
+the interface exists only in the container's network namespace, so reusing the host NIC's MAC is safe.
 
 ## After changing the config
 
 | Change | Action |
 |---|---|
-| Directories, ports, passwords, `CONTAINER_MAC`, `EXTRA_*` | `./casper.sh up` |
-| `CONTAINER_USER`, or a different host user (UID/GID changed) | `./casper.sh build`, then `./casper.sh up` |
+| Directories, ports, passwords, MAC, mounts | `casper up` |
+| `container.user`, or a different host user (UID/GID changed) | `casper build`, then `casper up` |
 
-## Repository layout
+## Development
 
 ```
-casper.sh              entry script
-compose.yml            base compose definition (variables from .generated/.env)
-config/                user config
-versions/<ver>/        per-version Dockerfile and toolflow.conf (protected by SHA256SUMS, do not modify)
-common/packages/       software.list: apt packages installed into the image
-common/scripts/        image build scripts
-common/rootfs/         files copied into the image (sshd config, profile, entrypoint)
-common/vnc/xstartup    VNC session script
-lib/                   function library for casper.sh
-tools/                 maintenance tools
-.generated/            generated .env and compose.override.yml
+src/casper_container/
+├── cli.py             Typer commands
+├── config.py          casper.toml parsing and validation
+├── podman.py          podman build/run arguments and container queries
+├── versions.py        toolflow versions in assets/versions
+├── templates/         casper.toml template
+└── assets/            build context: Dockerfiles, build scripts, rootfs, software.list
+tests/                 pytest tests
 ```
 
-## Maintainers: adding a version
+```bash
+uv sync
+uv run pytest
+uv run casper --help
+uv tool install -e .           # installed casper uses this source tree
+```
 
-1. Copy `versions/m2021a` to `versions/<new version>`, edit `toolflow.conf` (`TOOLFLOW_VERSION` must match the directory name) and adjust the Dockerfile as needed.
-2. Run `tools/update-checksums.sh` to update `versions/SHA256SUMS`.
+Adding apt packages: add one per line to `assets/common/packages/software.list`, then `casper build`.
 
-## Adding apt packages
+Adding a toolflow version: copy `assets/versions/m2021a` to `assets/versions/<new>`, edit
+`toolflow.toml` (`TOOLFLOW_VERSION` must match the directory name) and the Dockerfile as needed.
 
-Add the package name (one per line) to `common/packages/software.list`, then run `./casper.sh build`.
+The shell-based tool (`casper.sh`) is available at tag `v0.1.0`.
