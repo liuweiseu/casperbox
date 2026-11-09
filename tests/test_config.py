@@ -137,3 +137,36 @@ def test_run_args(env):
     assert "[::1]:2222:22/tcp" in args
     # passwords are passed through the environment, never on the command line
     assert not any("s3cret-pw" in a for a in args)
+
+
+def test_port_check_reports_all_conflicts(env, monkeypatch):
+    import socket
+
+    from casperbox import podman
+    from casperbox.config import PortMap
+    from casperbox.podman import ContainerInfo, check_ports_free
+
+    held = []
+    for _ in range(2):
+        s = socket.socket()
+        s.bind(("127.0.0.1", 0))
+        s.listen()
+        held.append(s)
+    ssh, extra = (s.getsockname()[1] for s in held)
+    other = ContainerInfo("other", "running", "Up", {}, [PortMap(45999, 22, "tcp")])
+    monkeypatch.setattr(podman, "list_containers", lambda name=None: [other])
+    cfg = env(
+        ports={"bind_address": "127.0.0.1", "ssh": ssh, "vnc": 45999},
+        extra_ports=[{"host": extra, "container": 80}],
+    )
+    try:
+        with pytest.raises(CasperError) as e:
+            check_ports_free(cfg, None)
+    finally:
+        for s in held:
+            s.close()
+    msg = str(e.value)
+    assert "3 host port(s)" in msg
+    assert f"{ssh}/tcp (ports.ssh): already in use" in msg
+    assert "45999/tcp (ports.vnc): used by container other" in msg
+    assert f"{extra}/tcp (extra_ports[0]): already in use" in msg

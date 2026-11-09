@@ -22,10 +22,27 @@ mlib_devel, device-tree-xlnx and Scilab. Vivado and the license are mounted from
 Log in directly (SSH or desktop) as the user that runs podman (do not switch with `su`), then run:
 
 ```bash
-loginctl enable-linger                      # keep the user session so containers survive logout
+loginctl enable-linger "$(id -un)"          # keep the user's systemd running, also after logout
 grep "^$(id -un):" /etc/subuid /etc/subgid  # should print one line each; otherwise ask an admin
 podman system migrate
-podman info --format '{{.Host.CgroupManager}}'   # OK if it prints systemd with no WARN
+ls /run/user/$(id -u)/bus                   # the user's systemd bus must exist
+podman run --rm docker.io/library/ubuntu:20.04 true   # must succeed with no WARN/ERROR
+```
+
+If the last command fails with `sd-bus call: Access denied` (no user systemd session, e.g. after `su`),
+either point the shell at the user's bus:
+
+```bash
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
+```
+
+or stop podman from using systemd for cgroups:
+
+```bash
+mkdir -p ~/.config/containers
+printf '[engine]\ncgroup_manager = "cgroupfs"\nevents_logger = "file"\n' >> ~/.config/containers/containers.conf
+podman system migrate
 ```
 
 ## Install

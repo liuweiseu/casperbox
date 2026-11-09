@@ -167,7 +167,7 @@ def check_owner(cfg: Config, info: ContainerInfo) -> None:
 
 
 def check_ports_free(cfg: Config, own: ContainerInfo | None) -> None:
-    """Check that the host ports are not held by another process or container."""
+    """Check all host ports at once; report every port held by another process or container."""
     held_by_own = {(p.host, p.protocol) for p in own.ports} if own else set()
     others = {
         (p.host, p.protocol): c.name
@@ -175,14 +175,22 @@ def check_ports_free(cfg: Config, own: ContainerInfo | None) -> None:
         if c.state == "running" and (own is None or c.name != own.name)
         for p in c.ports
     }
-    for pm in cfg.all_ports:
+    wanted = [("ports.ssh", cfg.all_ports[0]), ("ports.vnc", cfg.all_ports[1])]
+    wanted += [(f"extra_ports[{i}]", pm) for i, pm in enumerate(cfg.extra_ports)]
+
+    problems = []
+    for key_name, pm in wanted:
         key = (pm.host, pm.protocol)
+        where = f"{pm.host}/{pm.protocol} ({key_name})"
         if key in others:
-            raise CasperError(f"Host port {pm.host}/{pm.protocol} is used by container {others[key]}")
-        if key in held_by_own:
-            continue
-        if not _port_free(cfg.bind_address, pm.host, pm.protocol):
-            raise CasperError(f"Host port {pm.host}/{pm.protocol} on {cfg.bind_address} is already in use")
+            problems.append(f"{where}: used by container {others[key]}")
+        elif key not in held_by_own and not _port_free(cfg.bind_address, pm.host, pm.protocol):
+            problems.append(f"{where}: already in use on {cfg.bind_address}")
+    if problems:
+        raise CasperError(
+            f"{len(problems)} host port(s) unavailable:\n  " + "\n  ".join(problems)
+            + f"\nChange them in {cfg.path.name}, or see `casperbox ps`."
+        )
 
 
 def _port_free(addr: str, port: int, proto: str) -> bool:
