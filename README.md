@@ -5,6 +5,9 @@
 The image includes openssh-server, TigerVNC (XFCE desktop), Firefox, Miniconda (conda env),
 mlib_devel, device-tree-xlnx and Scilab. Vivado and the license are mounted from the host.
 
+The package also installs `casperbox-dev`, which builds plain base containers for testing
+(see [casperbox-dev](#casperbox-dev)).
+
 ## Supported versions
 
 | Version | Base image | Vivado | Python | mlib_devel | device-tree-xlnx | Scilab |
@@ -139,6 +142,40 @@ the interface exists only in the container's network namespace, so reusing the h
 (Dockerfile, scripts, `software.list`), the toolflow version, `container.user` or the host UID/GID
 changed since the last build. `casperbox status` shows whether the image is up to date.
 
+## casperbox-dev
+
+`casperbox-dev` gives developers a plain container to test software in: a base OS with SSH, a VNC
+(XFCE) desktop, Firefox and the packages you list, but no toolflow (no Vivado, mlib_devel, conda or Scilab)
+and no directories mounted by default.
+
+```bash
+mkdir ~/dev-test && cd ~/dev-test
+casperbox-dev init                 # creates casper-dev.toml (default os: ubuntu:26.04)
+vi casper-dev.toml                 # set os, packages, mounts
+casperbox-dev up
+casperbox-dev shell
+```
+
+`casper-dev.toml` has the same `[container]`, `[ports]`, `[vnc]`, `[[mounts]]` and `[[extra_ports]]`
+sections as `casperbox.toml`, plus:
+
+| Key | Default | Description |
+|---|---|---|
+| `os` | `ubuntu:26.04` | Base image, `name:tag` of any apt-based image (Ubuntu / Debian) |
+| `packages` | `[]` | Extra apt packages installed into the image |
+
+- Find image names and tags on [Docker Hub](https://hub.docker.com/_/ubuntu) or with
+  `podman search --list-tags docker.io/library/ubuntu`. `casperbox-dev list` shows the tested images;
+  others work with a warning.
+- Before building, the base image is pulled and checked to be apt-based.
+- Firefox comes from Mozilla's APT repository (packages.mozilla.org): on Ubuntu 22.04+ the
+  distribution's `firefox` package is a snap wrapper, which does not work in containers.
+- Default ports are 2322 (SSH) and 5902 (VNC), so it can run next to a `casperbox` container.
+- Each config gets its own image (`casperbox-dev:<container.name>`); changing `os` or `packages`
+  rebuilds it on the next `casperbox-dev up`.
+- All other commands (`build`, `up`, `down`, `restart`, `shell`, `status`, `logs`, `config`, `ps`)
+  work as in `casperbox`; `casperbox-dev init --os IMAGE` picks the base image.
+
 ## Development
 
 ```
@@ -147,8 +184,9 @@ src/casperbox/
 ├── config.py          casperbox.toml parsing and validation
 ├── podman.py          podman build/run arguments and container queries
 ├── versions.py        toolflow versions in assets/versions
-├── templates/         casperbox.toml template
+├── templates/         casperbox.toml and casper-dev.toml templates
 └── assets/            build context: Dockerfiles, build scripts, rootfs, software.list
+                       (dev/: casperbox-dev Dockerfile and base package list)
 tests/                 pytest tests
 ```
 

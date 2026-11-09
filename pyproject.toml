@@ -1,7 +1,7 @@
 [project]
 name = "casperbox"
 version = "0.2.3"
-description = "Build and run CASPER toolflow development containers with rootless podman"
+description = "Build and run CASPER toolflow (and plain dev) containers with rootless podman"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -10,6 +10,7 @@ dependencies = [
 
 [project.scripts]
 casperbox = "casperbox.cli:main"
+casperbox-dev = "casperbox.cli:main_dev"
 
 [dependency-groups]
 dev = [

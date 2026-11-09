@@ -1,4 +1,8 @@
-"""casperbox.toml: load, apply defaults, validate."""
+"""Config files: casperbox.toml (toolflow containers) and casper-dev.toml (dev containers).
+
+Both share [container], [ports], [vnc], [[mounts]] and [[extra_ports]]; casperbox.toml adds
+the toolflow version, [vivado] and [paths]; casper-dev.toml adds the base OS and packages.
+"""
 
 from __future__ import annotations
 
@@ -7,14 +11,28 @@ import os
 import re
 import tomllib
 from dataclasses import dataclass, field
+from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from string import Template
 from typing import Any
 
 from .errors import CasperError
-from .versions import Toolflow, load_toolflow
+from .versions import Toolflow, assets_dir, load_toolflow
+
+RELEASE = "release"  # casperbox: CASPER toolflow containers
+DEV = "dev"  # casperbox-dev: plain base containers for testing
 
 DEFAULT_CONFIG_NAME = "casperbox.toml"
+DEV_CONFIG_NAME = "casper-dev.toml"
+CONFIG_NAMES = {RELEASE: DEFAULT_CONFIG_NAME, DEV: DEV_CONFIG_NAME}
+TOOL_NAMES = {RELEASE: "casperbox", DEV: "casperbox-dev"}
+
+# Default host ports; dev uses other ports so both can run side by side
+DEFAULT_PORTS = {RELEASE: (2222, 5901), DEV: (2322, 5902)}
+
+# Base images casperbox-dev has been tested with; others work with a warning
+DEV_TESTED_OS = ("ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04")
+DEV_DEFAULT_OS = "ubuntu:26.04"
 
 # Container ports used by the image itself
 SSH_CONTAINER_PORT = 22
@@ -37,8 +55,8 @@ class PortMap:
 
 @dataclass
 class Config:
+    kind: str  # RELEASE | DEV
     path: Path
-    toolflow: Toolflow
     name: str
     user: str
     password: str
@@ -46,10 +64,6 @@ class Config:
     mac: str
     shm_size: str
     tz: str
-    vivado_dir: Path
-    vivado_mount: str
-    license_dir: Path
-    work_dir: Path
     bind_address: str
     ssh_port: int
     vnc_port: int
@@ -57,10 +71,41 @@ class Config:
     mounts: list[Mount] = field(default_factory=list)
     extra_ports: list[PortMap] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # casperbox only
+    toolflow: Toolflow | None = None
+    vivado_dir: Path | None = None
+    vivado_mount: str = "ro"
+    license_dir: Path | None = None
+    work_dir: Path | None = None
+    # casperbox-dev only
+    os: str = ""  # as written in the config, e.g. ubuntu:26.04
+    base_image: str = ""  # fully qualified, e.g. docker.io/library/ubuntu:26.04
+    packages: list[str] = field(default_factory=list)
+
+    @property
+    def tool(self) -> str:
+        return TOOL_NAMES[self.kind]
 
     @property
     def version(self) -> str:
-        return self.toolflow.version
+        return self.toolflow.version if self.toolflow else ""
+
+    @property
+    def describe(self) -> str:
+        return f"toolflow {self.version}" if self.kind == RELEASE else self.os
+
+    @property
+    def image(self) -> str:
+        if self.toolflow:
+            return self.toolflow.image
+        # one image per dev config: each may install different packages
+        return f"casperbox-dev:{self.name}"
+
+    @property
+    def dockerfile(self) -> Path:
+        if self.toolflow:
+            return self.toolflow.dockerfile
+        return assets_dir() / "dev" / "Dockerfile"
 
     @property
     def home(self) -> str:
@@ -76,14 +121,53 @@ class Config:
 
 
 # ---------------------------------------------------------------------------
-# Template
+# Base image names (casperbox-dev)
 # ---------------------------------------------------------------------------
 
-def render_template(toolflow: Toolflow) -> str:
-    from importlib.resources import files
+_COMPONENT = r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
+_IMAGE_RE = re.compile(
+    rf"^(?P<repo>{_COMPONENT}(?::[0-9]+)?(?:/{_COMPONENT})*):(?P<tag>[A-Za-z0-9_][A-Za-z0-9_.-]{{0,127}})$"
+)
 
-    text = (files("casperbox") / "templates" / "casperbox.toml").read_text(encoding="utf-8")
-    return Template(text).substitute(version=toolflow.version, vivado_version=toolflow.vivado_version)
+
+def normalize_image(image: str) -> str:
+    """Check "name:tag" and return the fully qualified name (docker.io/library/... for short names)."""
+    m = _IMAGE_RE.match(image.strip())
+    if not m:
+        raise CasperError(
+            f"Invalid os: {image!r}; expected an image name with a tag, e.g. {DEV_DEFAULT_OS!r} "
+            "(find names and tags on https://hub.docker.com)"
+        )
+    repo, tag = m["repo"], m["tag"]
+    parts = repo.split("/")
+    if len(parts) == 1:
+        repo = f"docker.io/library/{repo}"
+    elif not ("." in parts[0] or ":" in parts[0] or parts[0] == "localhost"):
+        repo = f"docker.io/{repo}"
+    return f"{repo}:{tag}"
+
+
+def os_slug(image: str) -> str:
+    """ubuntu:26.04 -> ubuntu-26.04 (used in the default container name)."""
+    name, _, tag = image.strip().rpartition(":")
+    return re.sub(r"[^a-zA-Z0-9_.-]", "-", f"{name.rsplit('/', 1)[-1]}-{tag}")
+
+
+# ---------------------------------------------------------------------------
+# Templates
+# ---------------------------------------------------------------------------
+
+def _template(name: str) -> Template:
+    return Template((files("casperbox") / "templates" / name).read_text(encoding="utf-8"))
+
+
+def render_template(toolflow: Toolflow) -> str:
+    return _template("casperbox.toml").substitute(version=toolflow.version, vivado_version=toolflow.vivado_version)
+
+
+def render_dev_template(image: str) -> str:
+    normalize_image(image)  # validate before writing the file
+    return _template("casper-dev.toml").substitute(os=image, name=f"casper-dev-{os_slug(image)}")
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +225,8 @@ _NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$")
 _MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
 _GEOMETRY_RE = re.compile(r"^[0-9]+x[0-9]+$")
 _SHM_RE = re.compile(r"^[0-9]+[bkmgBKMG]?$")
+# apt package name, optionally with :arch and/or =version
+_PACKAGE_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]*(:[a-z0-9-]+)?(=[A-Za-z0-9.+~:-]+)?$")
 
 
 def _host_path(value: str, base: Path) -> Path:
@@ -188,39 +274,33 @@ def _protected_paths(user: str) -> list[str]:
 # Loading
 # ---------------------------------------------------------------------------
 
-def resolve_config_path(path: Path | None) -> Path:
-    p = (path or Path(DEFAULT_CONFIG_NAME)).expanduser()
+def resolve_config_path(path: Path | None, kind: str = RELEASE) -> Path:
+    default = CONFIG_NAMES[kind]
+    p = (path or Path(default)).expanduser()
     p = p if p.is_absolute() else Path.cwd() / p
     if not p.is_file():
         if path is None:
             raise CasperError(
-                f"{DEFAULT_CONFIG_NAME} not found in {Path.cwd()}; "
-                "run `casperbox init` to create one, or pass -c FILE"
+                f"{default} not found in {Path.cwd()}; "
+                f"run `{TOOL_NAMES[kind]} init` to create one, or pass -c FILE"
             )
         raise CasperError(f"Config file not found: {p}")
     return p.resolve()
 
 
-def load_config(path: Path | None = None) -> Config:
-    cfg_path = resolve_config_path(path)
+def load_config(path: Path | None = None, kind: str = RELEASE) -> Config:
+    cfg_path = resolve_config_path(path, kind)
     try:
         with cfg_path.open("rb") as f:
             doc = tomllib.load(f)
     except tomllib.TOMLDecodeError as e:
         raise CasperError(f"{cfg_path}: {e}") from e
-    return parse_config(doc, cfg_path)
+    return parse_dev_config(doc, cfg_path) if kind == DEV else parse_config(doc, cfg_path)
 
 
-def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
-    base = cfg_path.parent
-    top = _Table(doc, "")
-    warnings: list[str] = []
-
-    toolflow = load_toolflow(top.get("version", str))
-
-    # ---- [container] ----
+def _parse_container(top: _Table, default_name: str, warnings: list[str]) -> dict[str, Any]:
     c = top.table("container")
-    name = c.get("name", str, f"casper-{toolflow.version}")
+    name = c.get("name", str, default_name)
     if not _NAME_RE.match(name):
         raise CasperError(f"Invalid container.name: {name!r}")
     user = c.get("user", str, "casper")
@@ -241,6 +321,91 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
         raise CasperError(f"Invalid container.shm_size: {shm_size!r}")
     tz = _check_no_newline(c.get("tz", str, "UTC"), "container.tz")
     c.finish()
+    return {
+        "name": name, "user": user, "password": password, "vnc_password": vnc_password,
+        "mac": mac, "shm_size": shm_size, "tz": tz,
+    }
+
+
+def _parse_network(top: _Table, default_ports: tuple[int, int]) -> dict[str, Any]:
+    pt = top.table("ports")
+    bind_address = pt.get("bind_address", str, "0.0.0.0")
+    try:
+        ipaddress.ip_address(bind_address)
+    except ValueError as e:
+        raise CasperError(f"Invalid ports.bind_address: {bind_address!r}") from e
+    ssh_port = _check_port(pt.get("ssh", int, default_ports[0]), "ports.ssh")
+    vnc_port = _check_port(pt.get("vnc", int, default_ports[1]), "ports.vnc")
+    pt.finish()
+
+    vn = top.table("vnc")
+    vnc_geometry = vn.get("geometry", str, "1920x1080")
+    if not _GEOMETRY_RE.match(vnc_geometry):
+        raise CasperError("vnc.geometry must be WIDTHxHEIGHT, e.g. 1920x1080")
+    vn.finish()
+
+    extra_ports: list[PortMap] = []
+    for t in top.array_of_tables("extra_ports"):
+        host = _check_port(t.get("host", int), f"{t.where}.host")
+        cport = _check_port(t.get("container", int), f"{t.where}.container")
+        proto = t.get("protocol", str, "tcp")
+        t.finish()
+        if proto not in ("tcp", "udp"):
+            raise CasperError(f"{t.where}.protocol must be 'tcp' or 'udp'")
+        if cport in (SSH_CONTAINER_PORT, VNC_CONTAINER_PORT):
+            raise CasperError(f"{t.where}: container ports 22/5901 are reserved")
+        extra_ports.append(PortMap(host, cport, proto))
+
+    seen: set[tuple[int, str]] = set()
+    for pm in [PortMap(ssh_port, 22, "tcp"), PortMap(vnc_port, 5901, "tcp"), *extra_ports]:
+        if (pm.host, pm.protocol) in seen:
+            raise CasperError(f"Duplicate host port {pm.host}/{pm.protocol}")
+        seen.add((pm.host, pm.protocol))
+
+    return {
+        "bind_address": bind_address, "ssh_port": ssh_port, "vnc_port": vnc_port,
+        "vnc_geometry": vnc_geometry, "extra_ports": extra_ports,
+    }
+
+
+def _parse_mounts(top: _Table, base: Path, user: str, reserved: set[str]) -> list[Mount]:
+    home = f"/home/{user}"
+    reserved = {*reserved, home}
+    mounts: list[Mount] = []
+    for t in top.array_of_tables("mounts"):
+        hpath = _host_path(t.get("host", str), base)
+        cpath = t.get("container", str)
+        mode = t.get("mode", str, "rw")
+        t.finish()
+        if mode not in ("ro", "rw"):
+            raise CasperError(f"{t.where}.mode must be 'ro' or 'rw'")
+        if not hpath.exists():
+            raise CasperError(f"{t.where}.host does not exist: {hpath}")
+        if cpath == "~":
+            cpath = home
+        elif cpath.startswith("~/"):
+            cpath = f"{home}/{cpath[2:]}"
+        if not cpath.startswith("/"):
+            raise CasperError(f"{t.where}.container must be absolute or start with ~/: {cpath!r}")
+        cpath = os.path.normpath(cpath)
+        if ":" in str(hpath) or ":" in cpath:
+            raise CasperError(f"{t.where}: paths must not contain ':'")
+        if cpath in reserved:
+            raise CasperError(f"{t.where}.container conflicts with a reserved path: {cpath}")
+        reserved.add(cpath)
+        mounts.append(Mount(hpath, str(PurePosixPath(cpath)), mode))
+    return mounts
+
+
+def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
+    """casperbox.toml"""
+    base = cfg_path.parent
+    top = _Table(doc, "")
+    warnings: list[str] = []
+
+    toolflow = load_toolflow(top.get("version", str))
+    container = _parse_container(top, f"casper-{toolflow.version}", warnings)
+    user = container["user"]
 
     # ---- [vivado] ----
     v = top.table("vivado")
@@ -272,91 +437,56 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
     if work_dir.exists() and not work_dir.is_dir():
         raise CasperError(f"paths.work_dir is not a directory: {work_dir}")
 
-    # ---- [ports] ----
-    pt = top.table("ports")
-    bind_address = pt.get("bind_address", str, "0.0.0.0")
-    try:
-        ipaddress.ip_address(bind_address)
-    except ValueError as e:
-        raise CasperError(f"Invalid ports.bind_address: {bind_address!r}") from e
-    ssh_port = _check_port(pt.get("ssh", int, 2222), "ports.ssh")
-    vnc_port = _check_port(pt.get("vnc", int, 5901), "ports.vnc")
-    pt.finish()
-
-    # ---- [vnc] ----
-    vn = top.table("vnc")
-    vnc_geometry = vn.get("geometry", str, "1920x1080")
-    if not _GEOMETRY_RE.match(vnc_geometry):
-        raise CasperError("vnc.geometry must be WIDTHxHEIGHT, e.g. 1920x1080")
-    vn.finish()
-
-    # ---- [[extra_ports]] ----
-    extra_ports: list[PortMap] = []
-    for t in top.array_of_tables("extra_ports"):
-        host = _check_port(t.get("host", int), f"{t.where}.host")
-        cport = _check_port(t.get("container", int), f"{t.where}.container")
-        proto = t.get("protocol", str, "tcp")
-        t.finish()
-        if proto not in ("tcp", "udp"):
-            raise CasperError(f"{t.where}.protocol must be 'tcp' or 'udp'")
-        if cport in (SSH_CONTAINER_PORT, VNC_CONTAINER_PORT):
-            raise CasperError(f"{t.where}: container ports 22/5901 are reserved")
-        extra_ports.append(PortMap(host, cport, proto))
-
-    seen: set[tuple[int, str]] = set()
-    for pm in [PortMap(ssh_port, 22, "tcp"), PortMap(vnc_port, 5901, "tcp"), *extra_ports]:
-        if (pm.host, pm.protocol) in seen:
-            raise CasperError(f"Duplicate host port {pm.host}/{pm.protocol}")
-        seen.add((pm.host, pm.protocol))
-
-    # ---- [[mounts]] ----
+    network = _parse_network(top, DEFAULT_PORTS[RELEASE])
     home = f"/home/{user}"
-    reserved = {str(vivado_dir), home, f"{home}/.Xilinx", f"{home}/work", f"{home}/toolflow"}
-    mounts: list[Mount] = []
-    for t in top.array_of_tables("mounts"):
-        hpath = _host_path(t.get("host", str), base)
-        cpath = t.get("container", str)
-        mode = t.get("mode", str, "rw")
-        t.finish()
-        if mode not in ("ro", "rw"):
-            raise CasperError(f"{t.where}.mode must be 'ro' or 'rw'")
-        if not hpath.exists():
-            raise CasperError(f"{t.where}.host does not exist: {hpath}")
-        if cpath == "~":
-            cpath = home
-        elif cpath.startswith("~/"):
-            cpath = f"{home}/{cpath[2:]}"
-        if not cpath.startswith("/"):
-            raise CasperError(f"{t.where}.container must be absolute or start with ~/: {cpath!r}")
-        cpath = os.path.normpath(cpath)
-        if ":" in str(hpath) or ":" in cpath:
-            raise CasperError(f"{t.where}: paths must not contain ':'")
-        if cpath in reserved:
-            raise CasperError(f"{t.where}.container conflicts with a reserved path: {cpath}")
-        reserved.add(cpath)
-        mounts.append(Mount(hpath, str(PurePosixPath(cpath)), mode))
-
+    mounts = _parse_mounts(top, base, user, {str(vivado_dir), f"{home}/.Xilinx", f"{home}/work", f"{home}/toolflow"})
     top.finish()
 
     return Config(
+        kind=RELEASE,
         path=cfg_path,
+        **container,
+        **network,
+        mounts=mounts,
+        warnings=warnings,
         toolflow=toolflow,
-        name=name,
-        user=user,
-        password=password,
-        vnc_password=vnc_password,
-        mac=mac,
-        shm_size=shm_size,
-        tz=tz,
         vivado_dir=vivado_dir,
         vivado_mount=vivado_mount,
         license_dir=license_dir,
         work_dir=work_dir,
-        bind_address=bind_address,
-        ssh_port=ssh_port,
-        vnc_port=vnc_port,
-        vnc_geometry=vnc_geometry,
+    )
+
+
+def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
+    """casper-dev.toml"""
+    base = cfg_path.parent
+    top = _Table(doc, "")
+    warnings: list[str] = []
+
+    os_image = top.get("os", str).strip()
+    base_image = normalize_image(os_image)
+    if base_image not in {normalize_image(t) for t in DEV_TESTED_OS}:
+        warnings.append(f"os {os_image!r} has not been tested (tested: {', '.join(DEV_TESTED_OS)})")
+
+    packages = top.get("packages", list, [])
+    for pkg in packages:
+        if not isinstance(pkg, str) or not _PACKAGE_RE.match(pkg):
+            raise CasperError(f"Invalid entry in packages: {pkg!r} (expected an apt package name)")
+    packages = list(dict.fromkeys(packages))  # drop duplicates, keep order
+
+    container = _parse_container(top, f"casper-dev-{os_slug(os_image)}", warnings)
+    network = _parse_network(top, DEFAULT_PORTS[DEV])
+    mounts = _parse_mounts(top, base, container["user"], set())
+    top.finish()
+
+    return Config(
+        kind=DEV,
+        path=cfg_path,
+        **container,
+        **network,
         mounts=mounts,
-        extra_ports=extra_ports,
         warnings=warnings,
+        os=os_image,
+        base_image=base_image,
+        packages=packages,
     )

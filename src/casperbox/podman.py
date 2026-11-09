@@ -11,14 +11,16 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any
 
-from .config import Config, PortMap
+from .config import DEV_TESTED_OS, RELEASE, Config, PortMap
 from .errors import CasperError
 from .versions import assets_dir
 
 # Labels put on containers created by casperbox
 LABEL_MANAGED = "casperbox.managed"
 LABEL_CONFIG = "casperbox.config"
-LABEL_TOOLFLOW = "casperbox.toolflow"
+LABEL_KIND = "casperbox.kind"  # release (casperbox) | dev (casperbox-dev)
+LABEL_TOOLFLOW = "casperbox.toolflow"  # casperbox containers
+LABEL_OS = "casperbox.os"  # casperbox-dev containers
 # Label put on images: hash of the build inputs, used to detect outdated images
 LABEL_BUILD_HASH = "casperbox.build-hash"
 
@@ -77,8 +79,12 @@ def image_labels(image: str) -> dict[str, str]:
 
 
 def _build_arg_values(cfg: Config) -> dict[str, str]:
+    if cfg.kind == RELEASE:
+        args = dict(cfg.toolflow.params)
+    else:
+        args = {"BASE_IMAGE": cfg.base_image, "PACKAGES": " ".join(cfg.packages)}
     return {
-        **cfg.toolflow.params,
+        **args,
         "CONTAINER_USER": cfg.user,
         "USER_UID": str(os.getuid()),
         "USER_GID": str(os.getgid()),
@@ -86,15 +92,14 @@ def _build_arg_values(cfg: Config) -> dict[str, str]:
 
 
 def build_hash(cfg: Config) -> str:
-    """Hash of everything the image is built from: build args, the version's
-    Dockerfile/toolflow.toml and all shared build files under assets/common."""
+    """Hash of everything the image is built from: build args, the files next to the
+    Dockerfile (versions/<ver>/ or dev/) and all shared build files under assets/common."""
     h = hashlib.sha256()
     for k, v in sorted(_build_arg_values(cfg).items()):
         h.update(f"arg {k}={v}\n".encode())
     root = assets_dir()
-    version_dir = cfg.toolflow.dockerfile.parent
     files = sorted(
-        p for d in (root / "common", version_dir) for p in d.rglob("*")
+        p for d in (root / "common", cfg.dockerfile.parent) for p in d.rglob("*")
         if p.is_file() and "__pycache__" not in p.parts
     )
     for p in files:
@@ -106,7 +111,7 @@ def build_hash(cfg: Config) -> str:
 
 def build_args(cfg: Config, no_cache: bool = False) -> list[str]:
     cmd = [
-        "podman", "build", "-f", str(cfg.toolflow.dockerfile), "-t", cfg.toolflow.image,
+        "podman", "build", "-f", str(cfg.dockerfile), "-t", cfg.image,
         "--label", f"{LABEL_BUILD_HASH}={build_hash(cfg)}",
     ]
     if no_cache:
@@ -119,22 +124,39 @@ def build_args(cfg: Config, no_cache: bool = False) -> list[str]:
 
 def image_state(cfg: Config) -> str:
     """'missing', 'outdated' or 'current'."""
-    if not image_exists(cfg.toolflow.image):
+    if not image_exists(cfg.image):
         return "missing"
-    if image_labels(cfg.toolflow.image).get(LABEL_BUILD_HASH) != build_hash(cfg):
+    if image_labels(cfg.image).get(LABEL_BUILD_HASH) != build_hash(cfg):
         return "outdated"
     return "current"
 
 
 def check_image_matches(cfg: Config) -> None:
     """The image user must match the config, otherwise mounted directories get wrong permissions."""
-    labels = image_labels(cfg.toolflow.image)
+    labels = image_labels(cfg.image)
     have = (labels.get("casper.user"), labels.get("casper.uid"), labels.get("casper.gid"))
     want = (cfg.user, str(os.getuid()), str(os.getgid()))
     if have != want:
         raise CasperError(
-            f"User in image {cfg.toolflow.image} ({have[0]} {have[1]}:{have[2]}) does not match "
-            f"the current config ({want[0]} {want[1]}:{want[2]}); please run: casperbox build"
+            f"User in image {cfg.image} ({have[0]} {have[1]}:{have[2]}) does not match "
+            f"the current config ({want[0]} {want[1]}:{want[2]}); please run: {cfg.tool} build"
+        )
+
+
+def check_base_image(cfg: Config) -> None:
+    """casperbox-dev: make sure the base image exists and is apt-based before building."""
+    img = cfg.base_image
+    hint = f"Check `os` in {cfg.path.name}; tested: {', '.join(DEV_TESTED_OS)}"
+    if not image_exists(img) and subprocess.run(["podman", "pull", img], check=False).returncode != 0:
+        raise CasperError(f"Base image {img} could not be pulled (see the error above).\n{hint}")
+    r = subprocess.run(
+        ["podman", "run", "--rm", "--network", "none", "--entrypoint", "sh", img, "-c", "command -v apt-get"],
+        capture_output=True, text=True, check=False,
+    )
+    if r.returncode != 0:
+        raise CasperError(
+            f"Base image {img} is not an apt-based system (apt-get not found); "
+            f"casperbox-dev supports Ubuntu / Debian images.\n{hint}"
         )
 
 
@@ -153,6 +175,11 @@ class ContainerInfo:
     @property
     def config_path(self) -> str:
         return self.labels.get(LABEL_CONFIG, "")
+
+    @property
+    def kind(self) -> str:
+        # containers created before casperbox-dev existed have no kind label
+        return self.labels.get(LABEL_KIND, RELEASE)
 
 
 def _parse_ports(raw: Any) -> list[PortMap]:
@@ -247,7 +274,7 @@ def check_ports_free(cfg: Config, own: ContainerInfo | None) -> None:
     if problems:
         raise CasperError(
             f"{len(problems)} host port(s) unavailable:\n  " + "\n  ".join(problems)
-            + f"\nChange them in {cfg.path.name}, or see `casperbox ps`."
+            + f"\nChange them in {cfg.path.name}, or see `{cfg.tool} ps`."
         )
 
 
@@ -272,8 +299,9 @@ def pasta_network(cfg: Config) -> str:
 
 
 def container_env(cfg: Config) -> dict[str, str]:
+    env = {"VIVADO_DIR": str(cfg.vivado_dir)} if cfg.vivado_dir else {}
     return {
-        "VIVADO_DIR": str(cfg.vivado_dir),
+        **env,
         "CONTAINER_PWD": cfg.password,
         "VNC_PASSWORD": cfg.vnc_password,
         "VNC_GEOMETRY": cfg.vnc_geometry,
@@ -288,7 +316,8 @@ def run_args(cfg: Config) -> list[str]:
         "--hostname", cfg.name,
         "--label", f"{LABEL_MANAGED}=true",
         "--label", f"{LABEL_CONFIG}={cfg.path}",
-        "--label", f"{LABEL_TOOLFLOW}={cfg.version}",
+        "--label", f"{LABEL_KIND}={cfg.kind}",
+        *(["--label", f"{LABEL_TOOLFLOW}={cfg.version}"] if cfg.kind == RELEASE else ["--label", f"{LABEL_OS}={cfg.os}"]),
         "--network", pasta_network(cfg),
         # Map the host UID/GID into the container so mounted directories are writable
         "--userns", "keep-id",
@@ -301,18 +330,20 @@ def run_args(cfg: Config) -> list[str]:
     ]
     for k in container_env(cfg):
         cmd += ["-e", k]
-    volumes = [
-        f"{cfg.vivado_dir}:{cfg.vivado_dir}:{cfg.vivado_mount}",
-        f"{cfg.license_dir}:{cfg.home}/.Xilinx",
-        f"{cfg.work_dir}:{cfg.home}/work",
-        *(f"{m.host}:{m.container}:{m.mode}" for m in cfg.mounts),
-    ]
+    volumes = []
+    if cfg.kind == RELEASE:
+        volumes += [
+            f"{cfg.vivado_dir}:{cfg.vivado_dir}:{cfg.vivado_mount}",
+            f"{cfg.license_dir}:{cfg.home}/.Xilinx",
+            f"{cfg.work_dir}:{cfg.home}/work",
+        ]
+    volumes += [f"{m.host}:{m.container}:{m.mode}" for m in cfg.mounts]
     for v in volumes:
         cmd += ["-v", v]
     addr = f"[{cfg.bind_address}]" if ":" in cfg.bind_address else cfg.bind_address
     for p in cfg.all_ports:
         cmd += ["-p", f"{addr}:{p.host}:{p.container}/{p.protocol}"]
-    cmd.append(cfg.toolflow.image)
+    cmd.append(cfg.image)
     return cmd
 
 

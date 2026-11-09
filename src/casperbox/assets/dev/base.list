@@ -1,0 +1,27 @@
+# Base apt packages of the casperbox-dev image (installed by common/scripts/install_base.sh).
+# Extra packages come from `packages` in casper-dev.toml.
+
+# ---- basic tools ----
+ca-certificates
+curl
+sudo
+locales
+tzdata
+procps
+iproute2
+iputils-ping
+less
+nano
+
+# ---- ssh / vnc / desktop ----
+openssh-server
+tigervnc-standalone-server
+tigervnc-common
+tigervnc-tools
+xfce4
+xfce4-terminal
+dbus-x11
+x11-xserver-utils
+x11-utils
+xfonts-base
+fonts-dejavu
