@@ -29,7 +29,7 @@ TOOLFLOW_KEYS = (
 
 def assets_dir() -> Path:
     """Directory holding the Dockerfiles and build scripts (the build context)."""
-    return Path(str(files("casper_container") / "assets"))
+    return Path(str(files("casperbox") / "assets"))
 
 
 def versions_dir() -> Path:

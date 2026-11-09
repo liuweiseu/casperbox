@@ -1,6 +1,6 @@
-# casper-container
+# casperbox
 
-`casper` builds and runs CASPER toolflow development containers with rootless podman.
+`casperbox` builds and runs CASPER toolflow development containers with rootless podman.
 
 The image includes openssh-server, TigerVNC (XFCE desktop), Firefox, Miniconda (conda env),
 mlib_devel, device-tree-xlnx and Scilab. Vivado and the license are mounted from the host.
@@ -31,36 +31,36 @@ podman info --format '{{.Host.CgroupManager}}'   # OK if it prints systemd with 
 ## Install
 
 ```bash
-uv tool install git+https://github.com/<owner>/casper-container
+uv tool install git+https://github.com/<owner>/casperbox
 # or from a local clone
-uv tool install ./casper-container
+uv tool install ./casperbox
 ```
 
-Upgrade with `uv tool upgrade casper-container`.
+Upgrade with `uv tool upgrade casperbox`.
 
 ## Quick start
 
 ```bash
 mkdir ~/casper-a && cd ~/casper-a
-casper init                    # creates casper.toml
-vi casper.toml                 # set vivado.dir / paths.license_dir / ports
-casper up                      # builds the image on first use, then starts the container
+casperbox init                    # creates casperbox.toml
+vi casperbox.toml                 # set vivado.dir / paths.license_dir / ports
+casperbox up                      # builds the image on first use, then starts the container
 ```
 
 Connect:
 
 - SSH: `ssh -p <ports.ssh> casper@<host>`, password `container.password` (default `casper`)
 - VNC: `<host>:<ports.vnc>`, password `container.vnc_password` (default `casper`)
-- Local: `casper shell`
+- Local: `casperbox shell`
 
 ## Configuration
 
-`casper init` writes a commented `casper.toml` (permissions 600, it holds passwords).
+`casperbox init` writes a commented `casperbox.toml` (permissions 600, it holds passwords).
 Relative paths in it are relative to the file's directory.
 
 | Key | Default | Description |
 |---|---|---|
-| `version` | | Toolflow version (`casper list`) |
+| `version` | | Toolflow version (`casperbox list`) |
 | `container.name` | `casper-<version>` | Container name and hostname |
 | `container.user` | `casper` | Container user |
 | `container.password` / `vnc_password` | `casper` | SSH/sudo and VNC (6-8 chars) passwords |
@@ -83,30 +83,30 @@ Each config file is one container. Use another directory or file, and give it it
 `container.name` and ports:
 
 ```bash
-casper init lab.toml           # edit container.name, ports.ssh, ports.vnc
-casper -c lab.toml up
-casper ps                      # all casper containers, from any directory
+casperbox init lab.toml           # edit container.name, ports.ssh, ports.vnc
+casperbox -c lab.toml up
+casperbox ps                      # all casperbox containers, from any directory
 ```
 
-`casper` refuses to recreate or remove a container that was created from a different config file.
+`casperbox` refuses to recreate or remove a container that was created from a different config file.
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `casper list` | List supported toolflow versions |
-| `casper init [FILE] [--toolflow VER] [--force]` | Create a config file (default `casper.toml`) |
-| `casper build [--no-cache]` | Build the image |
-| `casper up` | Start (recreate) the container; builds the image if missing |
-| `casper down` | Stop and remove the container |
-| `casper restart` | `down` + `up` |
-| `casper shell` | Open a login shell as the container user |
-| `casper status` | Container status and ports |
-| `casper logs [-f]` | Container logs |
-| `casper config` | Resolved config and podman commands (passwords masked) |
-| `casper ps` | List all casper containers |
+| `casperbox list` | List supported toolflow versions |
+| `casperbox init [FILE] [--toolflow VER] [--force]` | Create a config file (default `casperbox.toml`) |
+| `casperbox build [--no-cache]` | Build the image |
+| `casperbox up` | Start (recreate) the container; builds the image if missing |
+| `casperbox down` | Stop and remove the container |
+| `casperbox restart` | `down` + `up` |
+| `casperbox shell` | Open a login shell as the container user |
+| `casperbox status` | Container status and ports |
+| `casperbox logs [-f]` | Container logs |
+| `casperbox config` | Resolved config and podman commands (passwords masked) |
+| `casperbox ps` | List all casperbox containers |
 
-`-c FILE` selects the config file (before or after the command); the default is `./casper.toml`.
+`-c FILE` selects the config file (before or after the command); the default is `./casperbox.toml`.
 
 ## Inside the container
 
@@ -134,18 +134,18 @@ the interface exists only in the container's network namespace, so reusing the h
 
 | Change | Action |
 |---|---|
-| Directories, ports, passwords, MAC, mounts | `casper up` |
-| `container.user`, or a different host user (UID/GID changed) | `casper build`, then `casper up` |
+| Directories, ports, passwords, MAC, mounts | `casperbox up` |
+| `container.user`, or a different host user (UID/GID changed) | `casperbox build`, then `casperbox up` |
 
 ## Development
 
 ```
-src/casper_container/
+src/casperbox/
 ├── cli.py             Typer commands
-├── config.py          casper.toml parsing and validation
+├── config.py          casperbox.toml parsing and validation
 ├── podman.py          podman build/run arguments and container queries
 ├── versions.py        toolflow versions in assets/versions
-├── templates/         casper.toml template
+├── templates/         casperbox.toml template
 └── assets/            build context: Dockerfiles, build scripts, rootfs, software.list
 tests/                 pytest tests
 ```
@@ -153,11 +153,11 @@ tests/                 pytest tests
 ```bash
 uv sync
 uv run pytest
-uv run casper --help
-uv tool install -e .           # installed casper uses this source tree
+uv run casperbox --help
+uv tool install -e .           # installed casperbox uses this source tree
 ```
 
-Adding apt packages: add one per line to `assets/common/packages/software.list`, then `casper build`.
+Adding apt packages: add one per line to `assets/common/packages/software.list`, then `casperbox build`.
 
 Adding a toolflow version: copy `assets/versions/m2021a` to `assets/versions/<new>`, edit
 `toolflow.toml` (`TOOLFLOW_VERSION` must match the directory name) and the Dockerfile as needed.

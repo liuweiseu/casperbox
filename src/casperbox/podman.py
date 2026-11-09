@@ -14,10 +14,10 @@ from .config import Config, PortMap
 from .errors import CasperError
 from .versions import assets_dir
 
-# Labels put on containers created by casper
-LABEL_MANAGED = "casper.managed"
-LABEL_CONFIG = "casper.config"
-LABEL_TOOLFLOW = "casper.toolflow"
+# Labels put on containers created by casperbox
+LABEL_MANAGED = "casperbox.managed"
+LABEL_CONFIG = "casperbox.config"
+LABEL_TOOLFLOW = "casperbox.toolflow"
 
 # Environment passed to the container. Values are put in podman's own environment
 # and referenced by name (-e NAME), so passwords never appear on a command line.
@@ -33,7 +33,7 @@ def check_dependencies() -> None:
         raise CasperError("pasta not found; please install the passt package (the container uses pasta networking)")
     rootless = _output(["podman", "info", "--format", "{{.Host.Security.Rootless}}"], check=False).strip()
     if rootless != "true":
-        raise CasperError("podman is not running in rootless mode; run casper as a regular user")
+        raise CasperError("podman is not running in rootless mode; run casperbox as a regular user")
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ def check_image_matches(cfg: Config) -> None:
     if have != want:
         raise CasperError(
             f"User in image {cfg.toolflow.image} ({have[0]} {have[1]}:{have[2]}) does not match "
-            f"the current config ({want[0]} {want[1]}:{want[2]}); please run: casper build"
+            f"the current config ({want[0]} {want[1]}:{want[2]}); please run: casperbox build"
         )
 
 
@@ -159,7 +159,7 @@ def get_container(name: str) -> ContainerInfo | None:
 def check_owner(cfg: Config, info: ContainerInfo) -> None:
     """Refuse to touch a container that was created from another config file."""
     if info.config_path != str(cfg.path):
-        origin = info.config_path or "outside casper (or by an older casper version)"
+        origin = info.config_path or "outside casperbox"
         raise CasperError(
             f"Container {cfg.name} was created by {origin}, not by {cfg.path}.\n"
             f"Change container.name in {cfg.path.name} to create a separate container."

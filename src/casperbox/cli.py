@@ -1,4 +1,4 @@
-"""casper command-line interface."""
+"""casperbox command-line interface."""
 
 from __future__ import annotations
 
@@ -44,6 +44,13 @@ def warn(msg: str) -> None:
     typer.echo(msg, err=True)
 
 
+def _print_table(rows: list[tuple[str, ...]]) -> None:
+    """Print rows as left-aligned columns; the first row is the header."""
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    for r in rows:
+        typer.echo("  ".join(f"{v:<{w}}" for v, w in zip(r, widths, strict=True)).rstrip())
+
+
 def error(msg: str) -> None:
     typer.secho("[ERROR] ", fg=typer.colors.RED, nl=False, err=True)
     typer.echo(msg, err=True)
@@ -55,7 +62,7 @@ def error(msg: str) -> None:
 
 def _version_callback(value: bool) -> None:
     if value:
-        typer.echo(f"casper {__version__}")
+        typer.echo(f"casperbox {__version__}")
         raise typer.Exit()
 
 
@@ -64,14 +71,14 @@ def main_callback(
     ctx: typer.Context,
     config: ConfigOpt = None,
     version: Annotated[
-        bool, typer.Option("--version", callback=_version_callback, is_eager=True, help="Show the casper version")
+        bool, typer.Option("--version", callback=_version_callback, is_eager=True, help="Show the casperbox version")
     ] = False,
 ) -> None:
     ctx.obj = {"config": config}
 
 
 def _load(ctx: typer.Context, config: Path | None) -> Config:
-    """Load the config given by the command's -c, the global -c, or ./casper.toml."""
+    """Load the config given by the command's -c, the global -c, or ./casperbox.toml."""
     path = config or (ctx.obj or {}).get("config")
     cfg = load_config(path)
     for w in cfg.warnings:
@@ -91,16 +98,18 @@ def _prepare(ctx: typer.Context, config: Path | None) -> Config:
 @app.command("list")
 def list_cmd() -> None:
     """List supported toolflow versions."""
+    rows = [("TOOLFLOW", "VIVADO", "SCILAB", "PYTHON")]
     for v in list_versions():
         tf = load_toolflow(v)
-        typer.echo(f"{v}\tVivado {tf.vivado_version}, Python {tf.params['PYTHON_VERSION']}")
+        rows.append((v, tf.vivado_version, tf.params["SCILAB_VERSION"], tf.params["PYTHON_VERSION"]))
+    _print_table(rows)
 
 
 @app.command()
 def init(
     file: Annotated[Path, typer.Argument(help="Config file to create")] = Path(DEFAULT_CONFIG_NAME),
     toolflow: Annotated[
-        str | None, typer.Option("--toolflow", "-t", help="Toolflow version (see `casper list`)")
+        str | None, typer.Option("--toolflow", "-t", help="Toolflow version (see `casperbox list`)")
     ] = None,
     force: Annotated[bool, typer.Option("--force", "-f", help="Overwrite an existing file")] = False,
 ) -> None:
@@ -127,7 +136,7 @@ def init(
         warn(f"{path.parent} is inside a git repository; add {path.name} to .gitignore (it contains passwords)")
 
     cfg_arg = "" if path == Path.cwd() / DEFAULT_CONFIG_NAME else f" -c {shlex.quote(str(file))}"
-    typer.echo(f"\nNext: edit {file}, then run: casper{cfg_arg} up")
+    typer.echo(f"\nNext: edit {file}, then run: casperbox{cfg_arg} up")
 
 
 def _in_git_repo(directory: Path) -> bool:
@@ -189,7 +198,7 @@ def _print_access(cfg: Config) -> None:
     typer.echo(f"\nContainer {cfg.name} is up (toolflow {cfg.version})")
     typer.echo(f"  SSH  : ssh -p {cfg.ssh_port} {cfg.user}@{host}")
     typer.echo(f"  VNC  : {host}:{cfg.vnc_port}")
-    typer.echo(f"  Shell: casper{cfg_arg} shell")
+    typer.echo(f"  Shell: casperbox{cfg_arg} shell")
     for p in cfg.extra_ports:
         typer.echo(f"  Port : {p.host} -> {p.container}/{p.protocol}")
 
@@ -220,9 +229,9 @@ def shell(ctx: typer.Context, config: ConfigOpt = None) -> None:
     cfg = _prepare(ctx, config)
     own = podman.get_container(cfg.name)
     if not own:
-        raise CasperError(f"Container {cfg.name} does not exist, please run: casper up")
+        raise CasperError(f"Container {cfg.name} does not exist, please run: casperbox up")
     if own.state != "running":
-        raise CasperError(f"Container {cfg.name} is {own.state}, please run: casper up")
+        raise CasperError(f"Container {cfg.name} is {own.state}, please run: casperbox up")
     podman.exec_(["podman", "exec", "-it", "-u", cfg.user, "-w", cfg.home, cfg.name, "bash", "-l"])
 
 
@@ -284,19 +293,17 @@ def config_cmd(ctx: typer.Context, config: ConfigOpt = None) -> None:
 
 @app.command()
 def ps() -> None:
-    """List all containers created by casper."""
+    """List all containers created by casperbox."""
     podman.check_dependencies()
     containers = podman.list_containers()
     if not containers:
-        typer.echo("No casper containers")
+        typer.echo("No casperbox containers")
         return
     rows = [("NAME", "TOOLFLOW", "STATUS", "PORTS", "CONFIG")]
     for c in containers:
         ports = ",".join(f"{p.host}->{p.container}/{p.protocol}" for p in c.ports)
         rows.append((c.name, c.labels.get(podman.LABEL_TOOLFLOW, ""), c.status, ports, c.config_path))
-    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]) - 1)]
-    for r in rows:
-        typer.echo("  ".join(f"{v:<{w}}" for v, w in zip(r, widths)) + "  " + r[-1])
+    _print_table(rows)
 
 
 def main() -> None:

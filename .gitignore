@@ -1,5 +1,5 @@
-# casper configs (contain local paths and passwords)
-/casper.toml
+# casperbox configs (contain local paths and passwords)
+/casperbox.toml
 
 # Python
 __pycache__/

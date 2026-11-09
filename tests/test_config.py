@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from casper_container.config import parse_config, render_template
-from casper_container.errors import CasperError
-from casper_container.podman import run_args
-from casper_container.versions import list_versions, load_toolflow
+from casperbox.config import parse_config, render_template
+from casperbox.errors import CasperError
+from casperbox.podman import run_args
+from casperbox.versions import list_versions, load_toolflow
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def env(tmp_path: Path):
     (xilinx / "Vivado" / "2021.1" / "settings64.sh").touch()
     lic = tmp_path / "lic"
     lic.mkdir()
-    cfg_path = tmp_path / "proj" / "casper.toml"
+    cfg_path = tmp_path / "proj" / "casperbox.toml"
     cfg_path.parent.mkdir()
 
     def make(**overrides):

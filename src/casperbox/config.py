@@ -1,4 +1,4 @@
-"""casper.toml: load, apply defaults, validate."""
+"""casperbox.toml: load, apply defaults, validate."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any
 from .errors import CasperError
 from .versions import Toolflow, load_toolflow
 
-DEFAULT_CONFIG_NAME = "casper.toml"
+DEFAULT_CONFIG_NAME = "casperbox.toml"
 
 # Container ports used by the image itself
 SSH_CONTAINER_PORT = 22
@@ -82,7 +82,7 @@ class Config:
 def render_template(toolflow: Toolflow) -> str:
     from importlib.resources import files
 
-    text = (files("casper_container") / "templates" / "casper.toml").read_text(encoding="utf-8")
+    text = (files("casperbox") / "templates" / "casperbox.toml").read_text(encoding="utf-8")
     return Template(text).substitute(version=toolflow.version, vivado_version=toolflow.vivado_version)
 
 
@@ -195,7 +195,7 @@ def resolve_config_path(path: Path | None) -> Path:
         if path is None:
             raise CasperError(
                 f"{DEFAULT_CONFIG_NAME} not found in {Path.cwd()}; "
-                "run `casper init` to create one, or pass -c FILE"
+                "run `casperbox init` to create one, or pass -c FILE"
             )
         raise CasperError(f"Config file not found: {p}")
     return p.resolve()
