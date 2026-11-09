@@ -28,11 +28,12 @@ if [ -z "${CASPER_VIVADO_LOADED:-}" ] && [ -r "${_casper_vivado_settings}" ]; th
 fi
 unset _casper_vivado_settings
 
-# conda：每个 shell 都需要定义 conda 函数，环境已激活时不重复激活
+# conda：默认激活 toolflow 的 python 环境（CONDA_ENV_NAME，例如 casper）
+# 每个 shell 都要定义 conda 函数并执行 activate：
+#   - 环境变量会从父进程继承，但 conda 函数和提示符 PS1 不会；
+#   - 环境已激活时 conda 只做 reactivate，不会重复叠加，同时恢复 "(casper)" 提示符。
 if [ -r /opt/conda/etc/profile.d/conda.sh ]; then
     # shellcheck disable=SC1091
     . /opt/conda/etc/profile.d/conda.sh
-    if [ "${CONDA_DEFAULT_ENV:-}" != "${CONDA_ENV_NAME}" ]; then
-        conda activate "${CONDA_ENV_NAME}"
-    fi
+    conda activate "${CONDA_ENV_NAME}"
 fi
