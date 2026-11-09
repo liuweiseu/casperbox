@@ -9,7 +9,7 @@ mlib_devel, device-tree-xlnx and Scilab. Vivado and the license are mounted from
 
 | Version | Base image | Vivado | Python | mlib_devel | device-tree-xlnx | Scilab |
 |---|---|---|---|---|---|---|
-| m2021a | Ubuntu 20.04 | 2021.1 | 3.14 | [liuweiseu/mlib_devel](https://github.com/liuweiseu/mlib_devel) `scilab-dev-ai` | xlnx_rel_v2021.1 | 2024.1.0 |
+| m2021a | Ubuntu 20.04 | 2021.1 | 3.14 | scilab-dev-ai | xlnx_rel_v2021.1 | 2024.1.0 |
 
 ## Host requirements
 
