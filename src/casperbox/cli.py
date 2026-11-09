@@ -176,8 +176,12 @@ def up(ctx: typer.Context, config: ConfigOpt = None) -> None:
         podman.check_owner(cfg, own)
     podman.check_ports_free(cfg, own)
 
-    if not podman.image_exists(cfg.toolflow.image):
+    state = podman.image_state(cfg)
+    if state == "missing":
         info(f"Image {cfg.toolflow.image} not found, building it")
+        _build(cfg)
+    elif state == "outdated":
+        info(f"Image {cfg.toolflow.image} is out of date (build files, toolflow version or user changed), rebuilding it")
         _build(cfg)
     podman.check_image_matches(cfg)
 
@@ -237,8 +241,14 @@ def shell(ctx: typer.Context, config: ConfigOpt = None) -> None:
 
 @app.command()
 def status(ctx: typer.Context, config: ConfigOpt = None) -> None:
-    """Show the container status."""
+    """Show the image and container status."""
     cfg = _prepare(ctx, config)
+    image_note = {
+        "missing": "not built",
+        "outdated": "out of date, `casperbox up` or `casperbox build` will rebuild it",
+        "current": "up to date",
+    }[podman.image_state(cfg)]
+    typer.echo(f"{cfg.toolflow.image}: {image_note}")
     own = podman.get_container(cfg.name)
     if not own:
         typer.echo(f"{cfg.name}: not created")

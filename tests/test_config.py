@@ -170,3 +170,27 @@ def test_port_check_reports_all_conflicts(env, monkeypatch):
     assert f"{ssh}/tcp (ports.ssh): already in use" in msg
     assert "45999/tcp (ports.vnc): used by container other" in msg
     assert f"{extra}/tcp (extra_ports[0]): already in use" in msg
+
+
+def test_build_hash_tracks_build_inputs(env, monkeypatch, tmp_path):
+    import shutil
+
+    from casperbox import podman, versions
+
+    # work on a copy of the assets so the test can modify build files
+    assets = tmp_path / "assets"
+    shutil.copytree(versions.assets_dir(), assets)
+    monkeypatch.setattr(versions, "assets_dir", lambda: assets)
+    monkeypatch.setattr(podman, "assets_dir", lambda: assets)
+
+    cfg = env()
+    h1 = podman.build_hash(cfg)
+    assert podman.build_hash(cfg) == h1  # deterministic
+    assert f"casperbox.build-hash={h1}" in podman.build_args(cfg)
+
+    with (assets / "common" / "packages" / "software.list").open("a") as f:
+        f.write("htop\n")
+    h2 = podman.build_hash(cfg)
+    assert h2 != h1  # build file changed
+
+    assert podman.build_hash(env(container__user="alice")) != h2  # build arg changed

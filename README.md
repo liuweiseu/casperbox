@@ -133,8 +133,11 @@ the interface exists only in the container's network namespace, so reusing the h
 
 | Change | Action |
 |---|---|
-| Directories, ports, passwords, MAC, mounts | `casperbox up` |
-| `container.user`, or a different host user (UID/GID changed) | `casperbox build`, then `casperbox up` |
+| Anything | `casperbox up` |
+
+`casperbox up` rebuilds the image automatically when it is out of date: when the build files
+(Dockerfile, scripts, `software.list`), the toolflow version, `container.user` or the host UID/GID
+changed since the last build. `casperbox status` shows whether the image is up to date.
 
 ## Development
 
@@ -156,7 +159,7 @@ uv run casperbox --help
 uv tool install -e .           # installed casperbox uses this source tree
 ```
 
-Adding apt packages: add one per line to `assets/common/packages/software.list`, then `casperbox build`.
+Adding apt packages: add one per line to `assets/common/packages/software.list`, then `casperbox up` (the image is rebuilt automatically).
 
 Adding a toolflow version: copy `assets/versions/m2021a` to `assets/versions/<new>`, edit
 `toolflow.toml` (`TOOLFLOW_VERSION` must match the directory name) and the Dockerfile as needed.

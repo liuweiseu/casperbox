@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -18,6 +19,8 @@ from .versions import assets_dir
 LABEL_MANAGED = "casperbox.managed"
 LABEL_CONFIG = "casperbox.config"
 LABEL_TOOLFLOW = "casperbox.toolflow"
+# Label put on images: hash of the build inputs, used to detect outdated images
+LABEL_BUILD_HASH = "casperbox.build-hash"
 
 # Environment passed to the container. Values are put in podman's own environment
 # and referenced by name (-e NAME), so passwords never appear on a command line.
@@ -73,20 +76,54 @@ def image_labels(image: str) -> dict[str, str]:
     return json.loads(out) or {}
 
 
-def build_args(cfg: Config, no_cache: bool = False) -> list[str]:
-    args = {
+def _build_arg_values(cfg: Config) -> dict[str, str]:
+    return {
         **cfg.toolflow.params,
         "CONTAINER_USER": cfg.user,
         "USER_UID": str(os.getuid()),
         "USER_GID": str(os.getgid()),
     }
-    cmd = ["podman", "build", "-f", str(cfg.toolflow.dockerfile), "-t", cfg.toolflow.image]
+
+
+def build_hash(cfg: Config) -> str:
+    """Hash of everything the image is built from: build args, the version's
+    Dockerfile/toolflow.toml and all shared build files under assets/common."""
+    h = hashlib.sha256()
+    for k, v in sorted(_build_arg_values(cfg).items()):
+        h.update(f"arg {k}={v}\n".encode())
+    root = assets_dir()
+    version_dir = cfg.toolflow.dockerfile.parent
+    files = sorted(
+        p for d in (root / "common", version_dir) for p in d.rglob("*")
+        if p.is_file() and "__pycache__" not in p.parts
+    )
+    for p in files:
+        h.update(f"file {p.relative_to(root).as_posix()}\n".encode())
+        h.update(p.read_bytes())
+        h.update(b"\n")
+    return h.hexdigest()
+
+
+def build_args(cfg: Config, no_cache: bool = False) -> list[str]:
+    cmd = [
+        "podman", "build", "-f", str(cfg.toolflow.dockerfile), "-t", cfg.toolflow.image,
+        "--label", f"{LABEL_BUILD_HASH}={build_hash(cfg)}",
+    ]
     if no_cache:
         cmd.append("--no-cache")
-    for k, v in args.items():
+    for k, v in _build_arg_values(cfg).items():
         cmd += ["--build-arg", f"{k}={v}"]
     cmd.append(str(assets_dir()))
     return cmd
+
+
+def image_state(cfg: Config) -> str:
+    """'missing', 'outdated' or 'current'."""
+    if not image_exists(cfg.toolflow.image):
+        return "missing"
+    if image_labels(cfg.toolflow.image).get(LABEL_BUILD_HASH) != build_hash(cfg):
+        return "outdated"
+    return "current"
 
 
 def check_image_matches(cfg: Config) -> None:
