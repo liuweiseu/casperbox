@@ -1,5 +1,6 @@
 # apt packages installed into the image by common/scripts/install_base.sh
 # One package per line; text after # is ignored.
+# A trailing "?" marks an optional package: installed only if the OS release has it.
 
 # ---- basic tools ----
 ca-certificates

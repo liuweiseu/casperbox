@@ -31,7 +31,7 @@ TOOL_NAMES = {RELEASE: "casperbox", DEV: "casperbox-dev"}
 DEFAULT_PORTS = {RELEASE: (2222, 5901), DEV: (2322, 5902)}
 
 # Base images casperbox-dev has been tested with; others work with a warning
-DEV_TESTED_OS = ("ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04")
+DEV_TESTED_OS = ("ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04")
 DEV_DEFAULT_OS = "ubuntu:26.04"
 
 # Container ports used by the image itself

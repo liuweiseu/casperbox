@@ -4,14 +4,30 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Package list: one package per line, # starts a comment
+# Package list: one package per line, # starts a comment.
+# A trailing "?" marks an optional package: installed only if this OS release has it.
 pkg_list="${1:-/opt/casper/packages/software.list}"
 [[ -r "${pkg_list}" ]] || { echo "Error: package list not found: ${pkg_list}" >&2; exit 1; }
-mapfile -t packages < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "${pkg_list}")
-(( ${#packages[@]} > 0 )) || { echo "Error: no packages in ${pkg_list}" >&2; exit 1; }
-echo "Installing ${#packages[@]} packages from ${pkg_list}"
+mapfile -t entries < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "${pkg_list}")
+(( ${#entries[@]} > 0 )) || { echo "Error: no packages in ${pkg_list}" >&2; exit 1; }
 
 apt-get update
+
+packages=()
+for entry in "${entries[@]}"; do
+    if [[ "${entry}" == *"?" ]]; then
+        pkg="${entry%"?"}"
+        if apt-cache show "${pkg}" >/dev/null 2>&1; then
+            packages+=("${pkg}")
+        else
+            echo "Optional package ${pkg} is not available on this OS release, skipping"
+        fi
+    else
+        packages+=("${entry}")
+    fi
+done
+
+echo "Installing ${#packages[@]} packages from ${pkg_list}"
 apt-get install -y --no-install-recommends "${packages[@]}"
 
 # locale

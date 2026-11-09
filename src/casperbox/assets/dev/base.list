@@ -1,5 +1,6 @@
 # Base apt packages of the casperbox-dev image (installed by common/scripts/install_base.sh).
 # Extra packages come from `packages` in casper-dev.toml.
+# A trailing "?" marks an optional package: installed only if the OS release has it.
 
 # ---- basic tools ----
 ca-certificates
@@ -17,7 +18,8 @@ nano
 openssh-server
 tigervnc-standalone-server
 tigervnc-common
-tigervnc-tools
+# vncpasswd: separate package since TigerVNC 1.11; in tigervnc-common on Ubuntu 20.04
+tigervnc-tools?
 xfce4
 xfce4-terminal
 dbus-x11
