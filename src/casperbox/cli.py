@@ -71,7 +71,7 @@ def main_callback(
     ctx: typer.Context,
     config: ConfigOpt = None,
     version: Annotated[
-        bool, typer.Option("--version", callback=_version_callback, is_eager=True, help="Show the casperbox version")
+        bool, typer.Option("--version", "-v", callback=_version_callback, is_eager=True, help="Show the casperbox version")
     ] = False,
 ) -> None:
     ctx.obj = {"config": config}
