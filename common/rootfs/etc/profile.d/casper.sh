@@ -13,6 +13,12 @@ set +a
 
 export MLIB_DEVEL_PATH="${CASPER_TOOLFLOW_DIR}/mlib_devel"
 
+# ~/.local/bin（scilab 等链接在此）
+case ":${PATH}:" in
+    *":${HOME}/.local/bin:"*) ;;
+    *) export PATH="${HOME}/.local/bin:${PATH}" ;;
+esac
+
 # mlib_devel 本地配置（XILINX_PATH / JASPER_BACKEND / XLNX_DT_REPO_PATH 等）
 if [ -r "${MLIB_DEVEL_PATH}/startsg.local" ]; then
     # shellcheck disable=SC1091

@@ -67,6 +67,9 @@ vi config/user.conf            # 填写 VIVADO_DIR / XIL_LICENSE_DIR / WORK_DIR 
 
 登录 shell 会自动加载 Vivado `settings64.sh`、`startsg.local` 中的变量，并激活 conda 环境 `casper`。
 
+Scilab 解压在 `/opt/scilab`，可执行文件链接为 `~/.local/bin/scilab`（`~/.local/bin` 已加入 PATH），
+直接运行 `scilab` 即可。
+
 > 注意：`~/toolflow` 存在于镜像中，不是挂载目录。`down`/`up` 会重建容器，对其所做的修改会丢失，
 > 请把工程放在 `~/work` 下。
 

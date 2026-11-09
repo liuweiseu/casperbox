@@ -40,13 +40,13 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 COPY common/scripts/install_base.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/install_base.sh
 
-# 2. Scilab
-COPY common/scripts/install_scilab.sh /opt/casper/scripts/
-RUN bash /opt/casper/scripts/install_scilab.sh
-
-# 3. 创建用户（UID/GID 与宿主机一致，配合 userns keep-id）
+# 2. 创建用户（UID/GID 与宿主机一致，配合 userns keep-id）
 COPY common/scripts/create_user.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/create_user.sh
+
+# 3. Scilab：解压到 /opt/scilab，链接到 ~/.local/bin/scilab（需要用户已创建）
+COPY common/scripts/install_scilab.sh /opt/casper/scripts/
+RUN bash /opt/casper/scripts/install_scilab.sh
 
 # 4. Miniconda
 COPY common/scripts/install_miniconda.sh /opt/casper/scripts/
