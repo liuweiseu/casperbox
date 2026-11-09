@@ -193,6 +193,27 @@ def get_container(name: str) -> ContainerInfo | None:
     return found[0] if found else None
 
 
+@dataclass(frozen=True)
+class MountInfo:
+    source: str
+    destination: str
+    mode: str  # ro | rw
+
+
+def container_mounts(name: str) -> list[MountInfo]:
+    """Mounts of an existing container, as podman reports them."""
+    out = _output(["podman", "container", "inspect", "--format", "{{json .Mounts}}", name], check=False)
+    if not out.strip():
+        return []
+    mounts = []
+    for m in json.loads(out) or []:
+        try:
+            mounts.append(MountInfo(m["Source"], m["Destination"], "rw" if m.get("RW", True) else "ro"))
+        except (KeyError, TypeError):
+            continue
+    return mounts
+
+
 def check_owner(cfg: Config, info: ContainerInfo) -> None:
     """Refuse to touch a container that was created from another config file."""
     if info.config_path != str(cfg.path):

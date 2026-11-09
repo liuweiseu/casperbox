@@ -254,8 +254,16 @@ def status(ctx: typer.Context, config: ConfigOpt = None) -> None:
         typer.echo(f"{cfg.name}: not created")
         return
     typer.echo(f"{own.name}: {own.status}")
-    for p in own.ports:
-        typer.echo(f"  {p.host} -> {p.container}/{p.protocol}")
+    if own.ports:
+        typer.echo("  Ports:")
+        for p in own.ports:
+            typer.echo(f"    {p.host} -> {p.container}/{p.protocol}")
+    mounts = podman.container_mounts(own.name)
+    if mounts:
+        typer.echo("  Mounts:")
+        width = max(len(m.source) for m in mounts)
+        for m in mounts:
+            typer.echo(f"    {m.source:<{width}} -> {m.destination} ({m.mode})")
 
 
 @app.command()
