@@ -141,8 +141,9 @@ for _ in $(seq 30); do
     sleep 2
 done
 check "XFCE desktop running (xfce4-panel)" yes "${panel}"
+# Look at the executables: `pgrep -f` would also match the shell running this command
 check "Desktop session bus is the system dbus" no \
-    "$(ssh_run 'pgrep -af dbus-daemon | grep -q /opt/conda && echo yes || echo no')"
+    "$(ssh_run 'for p in $(pgrep -x dbus-daemon); do readlink "/proc/$p/exe"; done | grep -q /opt/conda && echo yes || echo no')"
 
 check "MAC address of eth0" "${mac}" "$(ssh_run cat /sys/class/net/eth0/address 2>&1 || true)"
 check "Host UID/GID inside the container (keep-id)" "$(id -u):$(id -g)" "$(ssh_run 'echo $(id -u):$(id -g)' 2>&1 || true)"
