@@ -107,14 +107,14 @@ def _build_arg_values(cfg: Config) -> dict[str, str]:
 
 
 def build_hash(cfg: Config) -> str:
-    """Hash of everything the image is built from: build args, the files next to the
-    Dockerfile (versions/<ver>/ or dev/) and all shared build files under assets/common."""
+    """Hash of everything the image is built from: build args and all files in the build
+    directories (assets/common plus toolflow/ and versions/<version>/, or dev/)."""
     h = hashlib.sha256()
     for k, v in sorted(_build_arg_values(cfg).items()):
         h.update(f"arg {k}={v}\n".encode())
     root = assets_dir()
     files = sorted(
-        p for d in (root / "common", cfg.dockerfile.parent) for p in d.rglob("*")
+        p for d in cfg.build_dirs if d.is_dir() for p in d.rglob("*")
         if p.is_file() and "__pycache__" not in p.parts
     )
     for p in files:

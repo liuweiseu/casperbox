@@ -142,7 +142,7 @@ the interface exists only in the container's network namespace, so reusing the h
 | Anything | `casperbox up` |
 
 `casperbox up` rebuilds the image automatically when it is out of date: when the build files
-(Dockerfile, scripts, `software.list`), the toolflow version, `container.user` or the host UID/GID
+(Dockerfile, scripts, package lists), the toolflow version, `container.user` or the host UID/GID
 changed since the last build. `casperbox status` shows whether the image is up to date.
 
 ## casperbox-dev
@@ -188,8 +188,7 @@ src/casperbox/
 ├── podman.py          podman build/run arguments and container queries
 ├── versions.py        toolflow versions in assets/versions
 ├── templates/         casperbox.toml and casper-dev.toml templates
-└── assets/            build context: Dockerfiles, build scripts, rootfs, software.list
-                       (dev/: casperbox-dev Dockerfile and base package list)
+└── assets/            build context (see below)
 tests/                 pytest tests; smoke/ container smoke test
 ```
 
@@ -220,9 +219,30 @@ tests/smoke/smoke.sh casperbox-dev --os ubuntu:24.04
 tests/smoke/smoke.sh casperbox
 ```
 
-Adding apt packages: add one per line to `assets/common/packages/software.list`, then `casperbox up` (the image is rebuilt automatically).
+### Build files (`src/casperbox/assets/`)
 
-Adding a toolflow version: copy `assets/versions/m2021a` to `assets/versions/<new>`, edit
-`toolflow.toml` (`TOOLFLOW_VERSION` must match the directory name) and the Dockerfile as needed.
+```
+common/packages/software.list   base apt packages, installed for every toolflow version
+common/scripts/                 build scripts (install_pkg_list.sh installs a package list)
+common/rootfs/                  sshd config, profile, entrypoint
+toolflow/Dockerfile             Dockerfile shared by all toolflow versions
+versions/<version>/
+    toolflow.toml               version definition (passed as build args)
+    pkgs.list                   optional: extra apt packages of this version (e.g. Vivado runtime deps)
+    Dockerfile                  optional: replaces toolflow/Dockerfile for this version
+dev/                            casperbox-dev: Dockerfile, base.list, install scripts
+```
+
+Package lists have one apt package per line; `#` starts a comment and a trailing `?` marks an
+optional package (installed only if the OS release has it). Packages are installed in this order:
+`common/packages/software.list`, then `versions/<version>/pkgs.list`.
+
+- Adding a package for every version: add it to `common/packages/software.list`.
+- Adding a package for one version: add it to `versions/<version>/pkgs.list`.
+- Adding a toolflow version: create `versions/<new>/toolflow.toml` (copy m2021a's; `TOOLFLOW_VERSION`
+  must match the directory name) and, if needed, `pkgs.list`. A Dockerfile is only needed if the
+  version's build steps differ.
+
+After any change, `casperbox up` rebuilds the image automatically.
 
 The shell-based tool (`casper.sh`) is available at tag `v0.1.0`.

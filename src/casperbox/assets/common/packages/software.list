@@ -1,4 +1,6 @@
-# apt packages installed into the image by common/scripts/install_base.sh
+# Base apt packages of the casperbox (toolflow) image, installed for every toolflow version
+# by common/scripts/install_base.sh. Packages a version needs in addition (e.g. the Vivado
+# runtime dependencies) are listed in versions/<version>/pkgs.list.
 # One package per line; text after # is ignored.
 # A trailing "?" marks an optional package: installed only if the OS release has it.
 
@@ -46,28 +48,3 @@ xfonts-base
 fonts-dejavu
 firefox
 
-# ---- Vivado runtime dependencies ----
-libtinfo5
-libncurses5
-libx11-6
-libxext6
-libxrender1
-libxtst6
-libxi6
-libxft2
-libxrandr2
-libxcursor1
-libxinerama1
-libsm6
-libice6
-libfreetype6
-libfontconfig1
-libglib2.0-0
-libgtk2.0-0
-libgtk-3-0
-libcanberra-gtk-module
-libcanberra-gtk3-module
-libasound2
-libgl1
-libglu1-mesa
-graphviz

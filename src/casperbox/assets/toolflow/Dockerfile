@@ -1,7 +1,7 @@
-# CASPER toolflow m2021a image
-# Built by `casper build`: build args come from versions/m2021a/toolflow.toml and the
-# user's casper.toml; the build context is the package's assets/ directory.
-# Do not change the defaults here to switch versions.
+# CASPER toolflow image, shared by all toolflow versions.
+# Built by `casperbox build`: build args come from versions/<version>/toolflow.toml and the
+# user's casperbox.toml; the build context is the package's assets/ directory.
+# A version that needs different build steps can provide its own versions/<version>/Dockerfile.
 
 ARG BASE_IMAGE=docker.io/library/ubuntu:20.04
 FROM ${BASE_IMAGE}
@@ -37,10 +37,19 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# 1. System packages: openssh-server / tigervnc / firefox / desktop / Vivado dependencies
+# 1. Base packages for every version: openssh-server / tigervnc / firefox / desktop / tools
 COPY common/packages/software.list /opt/casper/packages/
-COPY common/scripts/install_base.sh /opt/casper/scripts/
-RUN bash /opt/casper/scripts/install_base.sh
+COPY common/scripts/install_pkg_list.sh common/scripts/install_base.sh /opt/casper/scripts/
+RUN bash /opt/casper/scripts/install_base.sh /opt/casper/packages/software.list
+
+# 1b. Packages this version needs in addition (versions/<version>/pkgs.list, optional),
+#     e.g. the Vivado runtime dependencies
+COPY versions/${TOOLFLOW_VERSION}/ /opt/casper/version/
+RUN if [[ -f /opt/casper/version/pkgs.list ]]; then \
+        bash /opt/casper/scripts/install_pkg_list.sh /opt/casper/version/pkgs.list; \
+    else \
+        echo "No versions/${TOOLFLOW_VERSION}/pkgs.list"; \
+    fi
 
 # 2. Create the user (UID/GID match the host, for userns keep-id)
 COPY common/scripts/create_user.sh /opt/casper/scripts/

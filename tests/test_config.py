@@ -176,13 +176,13 @@ def test_port_check_reports_all_conflicts(env, monkeypatch):
 def test_build_hash_tracks_build_inputs(env, monkeypatch, tmp_path):
     import shutil
 
-    from casperbox import podman, versions
+    from casperbox import config, podman, versions
 
     # work on a copy of the assets so the test can modify build files
     assets = tmp_path / "assets"
     shutil.copytree(versions.assets_dir(), assets)
-    monkeypatch.setattr(versions, "assets_dir", lambda: assets)
-    monkeypatch.setattr(podman, "assets_dir", lambda: assets)
+    for module in (versions, config, podman):
+        monkeypatch.setattr(module, "assets_dir", lambda: assets)
 
     cfg = env()
     h1 = podman.build_hash(cfg)
@@ -192,9 +192,44 @@ def test_build_hash_tracks_build_inputs(env, monkeypatch, tmp_path):
     with (assets / "common" / "packages" / "software.list").open("a") as f:
         f.write("htop\n")
     h2 = podman.build_hash(cfg)
-    assert h2 != h1  # build file changed
+    assert h2 != h1  # shared build file changed
 
-    assert podman.build_hash(env(container__user="alice")) != h2  # build arg changed
+    with (assets / "versions" / "m2021a" / "pkgs.list").open("a") as f:
+        f.write("htop\n")
+    h3 = podman.build_hash(cfg)
+    assert h3 != h2  # version package list changed
+
+    with (assets / "toolflow" / "Dockerfile").open("a") as f:
+        f.write("# changed\n")
+    assert podman.build_hash(cfg) != h3  # shared Dockerfile changed
+
+    assert podman.build_hash(env(container__user="alice")) != podman.build_hash(cfg)  # build arg changed
+
+
+def test_version_dockerfile_and_pkgs_list(monkeypatch, tmp_path):
+    import shutil
+
+    from casperbox import versions
+
+    assets = tmp_path / "assets"
+    shutil.copytree(versions.assets_dir(), assets)
+    monkeypatch.setattr(versions, "assets_dir", lambda: assets)
+
+    tf = versions.load_toolflow("m2021a")
+    assert tf.dockerfile == assets / "toolflow" / "Dockerfile"  # shared by default
+    assert tf.pkgs_list == assets / "versions" / "m2021a" / "pkgs.list"
+    assert "libtinfo5" in tf.pkgs_list.read_text()
+
+    # a new version only needs toolflow.toml; its own Dockerfile overrides the shared one
+    new = assets / "versions" / "m2099a"
+    new.mkdir()
+    text = (assets / "versions" / "m2021a" / "toolflow.toml").read_text()
+    (new / "toolflow.toml").write_text(text.replace('"m2021a"', '"m2099a"'))
+    assert "m2099a" in versions.list_versions()
+    tf = versions.load_toolflow("m2099a")
+    assert tf.dockerfile == assets / "toolflow" / "Dockerfile" and tf.pkgs_list is None
+    (new / "Dockerfile").write_text("FROM scratch\n")
+    assert versions.load_toolflow("m2099a").dockerfile == new / "Dockerfile"
 
 
 def test_mounted_paths_must_exist(env, tmp_path):

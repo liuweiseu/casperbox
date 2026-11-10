@@ -108,6 +108,14 @@ class Config:
         return assets_dir() / "dev" / "Dockerfile"
 
     @property
+    def build_dirs(self) -> list[Path]:
+        """Directories whose files the image is built from (used to detect outdated images)."""
+        root = assets_dir()
+        if self.toolflow:
+            return [root / "common", root / "toolflow", self.toolflow.version_dir]
+        return [root / "common", root / "dev"]
+
+    @property
     def home(self) -> str:
         return f"/home/{self.user}"
 

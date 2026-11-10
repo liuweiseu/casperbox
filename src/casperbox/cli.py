@@ -351,6 +351,8 @@ def make_app(kind: str) -> typer.Typer:
         rows = [("config", str(cfg.path))]
         if cfg.kind == RELEASE:
             rows.append(("toolflow", cfg.version))
+            rows.append(("dockerfile", str(cfg.dockerfile)))
+            rows.append(("pkgs.list", str(cfg.toolflow.pkgs_list or "-")))
         else:
             rows += [("os", cfg.base_image), ("packages", " ".join(cfg.packages) or "-")]
         rows += [

@@ -41,7 +41,7 @@ def list_versions() -> list[str]:
     return sorted(
         d.name
         for d in root.iterdir()
-        if d.is_dir() and (d / "Dockerfile").is_file() and (d / "toolflow.toml").is_file()
+        if d.is_dir() and (d / "toolflow.toml").is_file()
     )
 
 
@@ -51,8 +51,20 @@ class Toolflow:
     params: dict[str, str]
 
     @property
+    def version_dir(self) -> Path:
+        return versions_dir() / self.version
+
+    @property
     def dockerfile(self) -> Path:
-        return versions_dir() / self.version / "Dockerfile"
+        """versions/<version>/Dockerfile if the version has its own, else the shared one."""
+        own = self.version_dir / "Dockerfile"
+        return own if own.is_file() else assets_dir() / "toolflow" / "Dockerfile"
+
+    @property
+    def pkgs_list(self) -> Path | None:
+        """Extra apt packages of this version (versions/<version>/pkgs.list), if any."""
+        p = self.version_dir / "pkgs.list"
+        return p if p.is_file() else None
 
     @property
     def vivado_version(self) -> str:
