@@ -2,22 +2,26 @@
 # Container entrypoint (runs as root):
 #   1. Set the user password from CONTAINER_PWD and the VNC password from VNC_PASSWORD
 #   2. Start sshd (22) and vncserver :1 (5901)
-#   3. Stay in the foreground and clean up on stop signals
-set -euo pipefail
+#   3. Stay in the foreground, restart sshd / vncserver if they stop, clean up on stop signals
+#
+# The services are independent: a failing VNC server must not take SSH down with it,
+# so errors after the setup are logged instead of ending the script.
+set -uo pipefail
 
-log() { echo "[entrypoint] $*"; }
+log() { echo "[entrypoint] $(date '+%H:%M:%S') $*"; }
+die() { log "ERROR: $*"; exit 1; }
 
 # toolflow.env: casperbox images; container.env: casperbox-dev images
 # shellcheck disable=SC1091
 [[ -r /etc/casper/toolflow.env ]] && . /etc/casper/toolflow.env
 # shellcheck disable=SC1091
 [[ -r /etc/casper/container.env ]] && . /etc/casper/container.env
-: "${CASPER_USER:?CASPER_USER is not set in /etc/casper/*.env}"
+[[ -n "${CASPER_USER:-}" ]] || die "CASPER_USER is not set in /etc/casper/*.env"
 user="${CASPER_USER}"
-group="$(id -gn "${user}")"
+group="$(id -gn "${user}")" || die "user ${user} does not exist in the image"
 home_dir="/home/${user}"
 
-: "${CONTAINER_PWD:?CONTAINER_PWD is not set}"
+[[ -n "${CONTAINER_PWD:-}" ]] || die "CONTAINER_PWD is not set"
 VNC_PASSWORD="${VNC_PASSWORD:-${CONTAINER_PWD}}"
 VNC_GEOMETRY="${VNC_GEOMETRY:-1920x1080}"
 if [[ ! "${VNC_GEOMETRY}" =~ ^[0-9]+x[0-9]+$ ]]; then
@@ -25,33 +29,24 @@ if [[ ! "${VNC_GEOMETRY}" =~ ^[0-9]+x[0-9]+$ ]]; then
     VNC_GEOMETRY=1920x1080
 fi
 
-# ---- Passwords ----
+# ---- Password (needed for SSH and sudo) ----
 log "Setting password for user ${user}"
-printf '%s:%s\n' "${user}" "${CONTAINER_PWD}" | chpasswd
-
-log "Setting VNC password"
-install -d -m 700 -o "${user}" -g "${group}" "${home_dir}/.vnc"
-printf '%s\n' "${VNC_PASSWORD}" | vncpasswd -f > "${home_dir}/.vnc/passwd"
-chown "${user}:${group}" "${home_dir}/.vnc/passwd"
-chmod 600 "${home_dir}/.vnc/passwd"
-if [[ ! -f "${home_dir}/.vnc/xstartup" ]]; then
-    install -m 755 -o "${user}" -g "${group}" /opt/casper/vnc/xstartup "${home_dir}/.vnc/xstartup"
-fi
-unset CONTAINER_PWD VNC_PASSWORD
+printf '%s:%s\n' "${user}" "${CONTAINER_PWD}" | chpasswd || die "chpasswd failed"
+unset CONTAINER_PWD
 
 # ---- Vivado paths (mounted at the same path as on the host; casperbox images only) ----
 # Two layouts are supported: <VIVADO_DIR>/Vivado/<version>/settings64.sh or <VIVADO_DIR>/settings64.sh
 if [[ -n "${VIVADO_DIR:-}" ]]; then
     xilinx_path=""
     composer_path=""
-    if [[ -r "${VIVADO_DIR}/Vivado/${VIVADO_VERSION}/settings64.sh" ]]; then
+    if [[ -r "${VIVADO_DIR}/Vivado/${VIVADO_VERSION:-}/settings64.sh" ]]; then
         xilinx_path="${VIVADO_DIR}/Vivado/${VIVADO_VERSION}"
         [[ -d "${VIVADO_DIR}/Model_Composer/${VIVADO_VERSION}" ]] \
             && composer_path="${VIVADO_DIR}/Model_Composer/${VIVADO_VERSION}"
     elif [[ -r "${VIVADO_DIR}/settings64.sh" ]]; then
         xilinx_path="${VIVADO_DIR}"
     else
-        log "Warning: settings64.sh for Vivado ${VIVADO_VERSION} not found under ${VIVADO_DIR}, please check VIVADO_DIR"
+        log "Warning: settings64.sh for Vivado ${VIVADO_VERSION:-} not found under ${VIVADO_DIR}, please check VIVADO_DIR"
     fi
     log "Vivado: ${xilinx_path:-<not found>}"
     {
@@ -64,24 +59,141 @@ if [[ -n "${VIVADO_DIR:-}" ]]; then
 fi
 
 # ---- sshd ----
-ssh-keygen -A >/dev/null
-mkdir -p /run/sshd
-log "Starting sshd"
-/usr/sbin/sshd
+sshd_running() { pgrep -x sshd >/dev/null; }
 
-# ---- vncserver ----
-rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
-log "Starting vncserver :1 (${VNC_GEOMETRY})"
-su - "${user}" -c "vncserver :1 -geometry ${VNC_GEOMETRY} -depth 24 -localhost no -SecurityTypes VncAuth"
+start_sshd() {
+    ssh-keygen -A >/dev/null 2>&1
+    mkdir -p /run/sshd
+    chmod 755 /run/sshd
+    log "Starting sshd"
+    if ! /usr/sbin/sshd; then
+        log "ERROR: sshd failed to start; config check:"
+        /usr/sbin/sshd -t 2>&1 | sed 's/^/    /'
+        return 1
+    fi
+}
+
+# ---- VNC ----
+# Debian/Ubuntu name the commands vncpasswd/vncserver (alternatives) or tigervncpasswd/tigervncserver
+find_cmd() {
+    local c
+    for c in "$@"; do
+        command -v "${c}" && return 0
+    done
+    return 1
+}
+vncpasswd_cmd="$(find_cmd vncpasswd tigervncpasswd)" || vncpasswd_cmd=""
+vncserver_cmd="$(find_cmd vncserver tigervncserver)" || vncserver_cmd=""
+
+# TigerVNC >= 1.14 (e.g. Ubuntu 26.04) keeps its files in ~/.config/tigervnc and its logs in
+# ~/.local/state/tigervnc, and tries to migrate an existing ~/.vnc on start (which fails if
+# ~/.config does not exist). Older versions use ~/.vnc for both.
+tigervnc_version() {
+    local x
+    x="$(find_cmd Xtigervnc Xvnc)" || return 1
+    "${x}" -version 2>&1 | sed -n 's/.*TigerVNC \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1
+}
+vnc_version="$(tigervnc_version)" || vnc_version=""
+vnc_major="${vnc_version%%.*}"
+vnc_minor="${vnc_version#*.}"
+if [[ -n "${vnc_version}" ]] && (( vnc_major > 1 || (vnc_major == 1 && vnc_minor >= 14) )); then
+    vnc_dir="${home_dir}/.config/tigervnc"
+    vnc_log_dirs=("${home_dir}/.local/state/tigervnc" "${vnc_dir}")
+else
+    vnc_dir="${home_dir}/.vnc"
+    vnc_log_dirs=("${vnc_dir}")
+fi
+
+setup_vnc() {
+    [[ -n "${vncpasswd_cmd}" ]] || { log "ERROR: vncpasswd not found in the image"; return 1; }
+    log "Setting VNC password (TigerVNC ${vnc_version:-unknown version}, config in ${vnc_dir})"
+    if [[ "${vnc_dir}" != "${home_dir}/.vnc" ]]; then
+        # Create the XDG directories owned by the user, and take over an existing ~/.vnc
+        # ourselves so that vncserver does not try (and fail) to migrate it
+        install -d -o "${user}" -g "${group}" "${home_dir}/.config" "${home_dir}/.local" "${home_dir}/.local/state"
+        install -d -m 700 -o "${user}" -g "${group}" "${vnc_dir}"
+        if [[ -d "${home_dir}/.vnc" ]]; then
+            if [[ -f "${home_dir}/.vnc/xstartup" && ! -f "${vnc_dir}/xstartup" ]]; then
+                mv "${home_dir}/.vnc/xstartup" "${vnc_dir}/xstartup"
+            fi
+            rm -rf "${home_dir}/.vnc"
+        fi
+    fi
+    install -d -m 700 -o "${user}" -g "${group}" "${vnc_dir}"
+    printf '%s\n' "${VNC_PASSWORD}" | "${vncpasswd_cmd}" -f > "${vnc_dir}/passwd" || return 1
+    chown "${user}:${group}" "${vnc_dir}/passwd"
+    chmod 600 "${vnc_dir}/passwd"
+    if [[ ! -f "${vnc_dir}/xstartup" ]]; then
+        install -m 755 -o "${user}" -g "${group}" /opt/casper/vnc/xstartup "${vnc_dir}/xstartup"
+    fi
+    # X server socket directory: must exist, be owned by root and world-writable with the sticky bit
+    install -d -m 1777 -o root -g root /tmp/.X11-unix
+}
+
+vnc_running() { pgrep -f 'X(tigervnc|vnc) :1( |$)' >/dev/null; }
+
+start_vnc() {
+    [[ -n "${vncserver_cmd}" ]] || { log "ERROR: vncserver not found in the image"; return 1; }
+    rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
+    log "Starting vncserver :1 (${VNC_GEOMETRY})"
+    if ! su - "${user}" -c "${vncserver_cmd} :1 -geometry ${VNC_GEOMETRY} -depth 24 -localhost no -SecurityTypes VncAuth"; then
+        log "ERROR: vncserver failed to start"
+        show_vnc_log
+        return 1
+    fi
+}
+
+show_vnc_log() {
+    local d f
+    for d in "${vnc_log_dirs[@]}"; do
+        for f in "${d}"/*:1.log; do
+            [[ -r "${f}" ]] || continue
+            log "Last lines of ${f}:"
+            tail -n 20 "${f}" | sed 's/^/    /'
+        done
+    done
+}
+
+start_sshd || true
+vnc_ok=1
+setup_vnc || { vnc_ok=0; log "ERROR: VNC setup failed, VNC will not be available"; }
+unset VNC_PASSWORD
+(( vnc_ok )) && { start_vnc || true; }
 
 cleanup() {
     log "Stopping services"
-    su - "${user}" -c "vncserver -kill :1" >/dev/null 2>&1 || true
-    pkill -TERM -x sshd 2>/dev/null || true
+    [[ -n "${vncserver_cmd}" ]] && su - "${user}" -c "${vncserver_cmd} -kill :1" >/dev/null 2>&1
+    pkill -TERM -x sshd 2>/dev/null
     exit 0
 }
 trap cleanup TERM INT
 
+if sshd_running; then log "sshd is running"; else log "ERROR: sshd is not running"; fi
+if (( vnc_ok )); then
+    if vnc_running; then log "vncserver :1 is running"; else log "ERROR: vncserver :1 is not running"; fi
+fi
 log "Container ready${TOOLFLOW_VERSION:+ (toolflow ${TOOLFLOW_VERSION})}"
-sleep infinity &
-wait $!
+
+# ---- Keep the services running ----
+# Restart a service that stopped (e.g. the VNC server exits when its desktop session ends).
+# Retries back off so that a service that keeps failing does not flood the log.
+sshd_delay=10
+vnc_delay=10
+sshd_next=0
+vnc_next=0
+while true; do
+    sleep 10 &
+    wait $!
+    now=$(date +%s)
+    if ! sshd_running && (( now >= sshd_next )); then
+        log "sshd is not running, restarting it"
+        if start_sshd; then sshd_delay=10; else sshd_delay=$(( sshd_delay < 300 ? sshd_delay * 2 : 300 )); fi
+        sshd_next=$(( now + sshd_delay ))
+    fi
+    if (( vnc_ok )) && ! vnc_running && (( now >= vnc_next )); then
+        log "vncserver :1 is not running, restarting it"
+        show_vnc_log
+        if start_vnc; then vnc_delay=10; else vnc_delay=$(( vnc_delay < 300 ? vnc_delay * 2 : 300 )); fi
+        vnc_next=$(( now + vnc_delay ))
+    fi
+done

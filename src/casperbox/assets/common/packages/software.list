@@ -35,6 +35,8 @@ device-tree-compiler
 openssh-server
 tigervnc-standalone-server
 tigervnc-common
+# xauth: used by vncserver; not pulled in with --no-install-recommends
+xauth
 xfce4
 xfce4-terminal
 dbus-x11

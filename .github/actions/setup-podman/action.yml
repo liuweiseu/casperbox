@@ -1,0 +1,31 @@
+name: Set up rootless podman and casperbox
+description: Install pasta and sshpass, configure rootless podman for CI, install casperbox with uv
+
+runs:
+  using: composite
+  steps:
+    - name: Install pasta (passt) and sshpass
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends passt sshpass
+
+    - name: Configure rootless podman
+      shell: bash
+      run: |
+        # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        # CI jobs have no systemd user session: use cgroupfs and file-based events
+        mkdir -p ~/.config/containers
+        printf '[engine]\ncgroup_manager = "cgroupfs"\nevents_logger = "file"\n' > ~/.config/containers/containers.conf
+        podman system migrate
+        podman info --format 'podman {{.Version.Version}}, rootless={{.Host.Security.Rootless}}, cgroup={{.Host.CgroupManager}}'
+        pasta --version | head -1
+
+    - uses: astral-sh/setup-uv@v6
+
+    - name: Install casperbox
+      shell: bash
+      run: |
+        uv tool install .
+        echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"

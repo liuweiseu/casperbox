@@ -190,7 +190,7 @@ src/casperbox/
 ├── templates/         casperbox.toml and casper-dev.toml templates
 └── assets/            build context: Dockerfiles, build scripts, rootfs, software.list
                        (dev/: casperbox-dev Dockerfile and base package list)
-tests/                 pytest tests
+tests/                 pytest tests; smoke/ container smoke test
 ```
 
 ```bash
@@ -198,6 +198,26 @@ uv sync
 uv run pytest
 uv run casperbox --help
 uv tool install -e .           # installed casperbox uses this source tree
+```
+
+### Tests
+
+CI (`.github/workflows/ci.yml`) runs on every push and pull request to `main` and `dev`:
+
+| Job | What it checks |
+|---|---|
+| Lint | ruff on the Python code, shellcheck on all shell scripts |
+| Unit tests | pytest on Python 3.11 – 3.14; both CLIs start |
+| casperbox-dev container | for each tested OS: build and start a container, then check SSH password login, VNC, an extra forwarded port, a read-only mount, the MAC address, the host UID/GID, sudo and Firefox |
+| casperbox container | the same for m2021a (with a stub Vivado), plus the conda env, `XILINX_PATH`, mlib_devel, device-tree-xlnx, Scilab and a writable `~/work` |
+
+The container jobs only check that the environment comes up; toolflow functionality is not tested.
+They run `tests/smoke/smoke.sh`, which also works on a host (needs `sshpass` and `curl`; the test
+container is called `smoke-<tool>`, uses ports 22022/25901/28888 and is removed afterwards):
+
+```bash
+tests/smoke/smoke.sh casperbox-dev --os ubuntu:24.04
+tests/smoke/smoke.sh casperbox
 ```
 
 Adding apt packages: add one per line to `assets/common/packages/software.list`, then `casperbox up` (the image is rebuilt automatically).
