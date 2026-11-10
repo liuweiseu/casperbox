@@ -219,6 +219,7 @@ def test_version_dockerfile_and_pkgs_list(monkeypatch, tmp_path):
     assert tf.dockerfile == assets / "toolflow" / "Dockerfile"  # shared by default
     assert tf.pkgs_list == assets / "versions" / "m2021a" / "pkgs.list"
     assert "libtinfo5" in tf.pkgs_list.read_text()
+    assert tf.patch_script == assets / "versions" / "m2021a" / "patch.sh"
 
     # a new version only needs toolflow.toml; its own Dockerfile overrides the shared one
     new = assets / "versions" / "m2099a"
@@ -228,6 +229,7 @@ def test_version_dockerfile_and_pkgs_list(monkeypatch, tmp_path):
     assert "m2099a" in versions.list_versions()
     tf = versions.load_toolflow("m2099a")
     assert tf.dockerfile == assets / "toolflow" / "Dockerfile" and tf.pkgs_list is None
+    assert tf.patch_script is None
     (new / "Dockerfile").write_text("FROM scratch\n")
     assert versions.load_toolflow("m2099a").dockerfile == new / "Dockerfile"
 

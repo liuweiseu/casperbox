@@ -167,6 +167,9 @@ if [[ "${tool}" == casperbox ]]; then
     # versions/m2021a/pkgs.list (Vivado runtime dependencies) was installed
     check "version packages (pkgs.list) installed" install \
         "$(ssh_run "dpkg-query -W -f='\${Status}' libtinfo5 2>/dev/null | cut -d' ' -f1")"
+    # versions/m2021a/patch.sh: libudev preloaded for Vivado 2021.1 in interactive shells
+    check "patch.sh: LD_PRELOAD in ~/.bashrc" yes \
+        "$(ssh_run 'grep -qF "LD_PRELOAD=\"/lib/x86_64-linux-gnu/libudev.so.1\"" .bashrc && echo yes || echo no')"
     ssh_run 'touch work/from-container' || true
     check "~/work is writable and owned by the host user" "$(id -u)" "$(stat -c %u work/from-container 2>/dev/null || echo missing)"
 fi

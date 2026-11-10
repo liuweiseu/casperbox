@@ -232,6 +232,7 @@ toolflow/Dockerfile             Dockerfile shared by all toolflow versions
 versions/<version>/
     toolflow.toml               version definition (passed as build args)
     pkgs.list                   optional: extra apt packages of this version (e.g. Vivado runtime deps)
+    patch.sh                    optional: version-specific fixes, run as root at the end of the build
     Dockerfile                  optional: replaces toolflow/Dockerfile for this version
 dev/                            casperbox-dev: Dockerfile, base.list, install scripts
 ```
@@ -242,6 +243,8 @@ optional package (installed only if the OS release has it). Packages are install
 
 - Adding a package for every version: add it to `common/packages/software.list`.
 - Adding a package for one version: add it to `versions/<version>/pkgs.list`.
+- Fixing something for one version (e.g. m2021a preloads libudev for Vivado 2021.1 in `~/.bashrc`):
+  put the commands in `versions/<version>/patch.sh`.
 - Adding a toolflow version: create `versions/<new>/toolflow.toml` (copy m2021a's; `TOOLFLOW_VERSION`
   must match the directory name) and, if needed, `pkgs.list`. A Dockerfile is only needed if the
   version's build steps differ.

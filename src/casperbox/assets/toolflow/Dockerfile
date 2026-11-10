@@ -90,6 +90,14 @@ RUN chmod 755 /usr/local/bin/entrypoint.sh /opt/casper/vnc/xstartup \
     } > /etc/casper/toolflow.env \
  && chmod 644 /etc/casper/toolflow.env
 
+# 7. Version-specific fixes (versions/<version>/patch.sh, optional), run as root last so that
+#    they can change anything set up above; the build args are available as environment variables
+RUN if [ -f /opt/casper/version/patch.sh ]; then \
+        bash /opt/casper/version/patch.sh; \
+    else \
+        echo "No versions/${TOOLFLOW_VERSION}/patch.sh"; \
+    fi
+
 EXPOSE 22 5901
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

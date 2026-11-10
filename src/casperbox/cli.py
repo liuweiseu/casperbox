@@ -353,6 +353,7 @@ def make_app(kind: str) -> typer.Typer:
             rows.append(("toolflow", cfg.version))
             rows.append(("dockerfile", str(cfg.dockerfile)))
             rows.append(("pkgs.list", str(cfg.toolflow.pkgs_list or "-")))
+            rows.append(("patch.sh", str(cfg.toolflow.patch_script or "-")))
         else:
             rows += [("os", cfg.base_image), ("packages", " ".join(cfg.packages) or "-")]
         rows += [

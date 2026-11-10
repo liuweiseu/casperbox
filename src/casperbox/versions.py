@@ -67,6 +67,12 @@ class Toolflow:
         return p if p.is_file() else None
 
     @property
+    def patch_script(self) -> Path | None:
+        """Version-specific fixes run at the end of the build (versions/<version>/patch.sh), if any."""
+        p = self.version_dir / "patch.sh"
+        return p if p.is_file() else None
+
+    @property
     def vivado_version(self) -> str:
         return self.params["VIVADO_VERSION"]
 
