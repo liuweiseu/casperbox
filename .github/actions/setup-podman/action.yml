@@ -13,7 +13,7 @@ runs:
     - name: Configure rootless podman
       shell: bash
       run: |
-        # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor
+        # Ubuntu 24.04+ restricts unprivileged user namespaces with AppArmor
         sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
         # CI jobs have no systemd user session: use cgroupfs and file-based events
         mkdir -p ~/.config/containers

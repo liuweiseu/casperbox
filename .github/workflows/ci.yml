@@ -20,7 +20,7 @@ jobs:
   # ---------------------------------------------------------------------------
   lint:
     name: Lint (ruff, shellcheck)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -37,7 +37,7 @@ jobs:
 
   unit-tests:
     name: Unit tests (Python ${{ matrix.python }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -63,7 +63,7 @@ jobs:
   dev-container:
     name: casperbox-dev container (${{ matrix.os }})
     needs: [lint, unit-tests]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -81,7 +81,7 @@ jobs:
   toolflow-container:
     name: casperbox container (m2021a)
     needs: [lint, unit-tests]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 120
     steps:
       - name: Free disk space (the toolflow image is large)
