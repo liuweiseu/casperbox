@@ -111,6 +111,7 @@ casperbox ps                      # all casperbox containers, from any directory
 | `casperbox up [--yes]` | Start (recreate) the container; builds the image if missing or outdated |
 | `casperbox down` | Stop and remove the container |
 | `casperbox restart` | Stop and start the container; its data is kept, config changes are not applied |
+| `casperbox commit [IMAGE] [-o FILE]` | Save the container (with the changes made in it) as an image, optionally also to a tar file |
 | `casperbox shell` | Open a login shell as the container user |
 | `casperbox status` | Container status and ports |
 | `casperbox logs [-f]` | Container logs |
@@ -118,6 +119,19 @@ casperbox ps                      # all casperbox containers, from any directory
 | `casperbox ps` | List all casperbox containers |
 
 `-c FILE` selects the config file (before or after the command); the default is `./casperbox.toml`.
+
+### Saving a container as an image
+
+```bash
+casperbox commit                       # -> localhost/<container>:snapshot-<date>-<time>
+casperbox commit mytoolflow:v1 -o mytoolflow.tar
+podman load -i mytoolflow.tar          # on another machine
+```
+
+The image contains everything changed in the container (packages installed with apt, edits in
+`~/toolflow`, ...), but not the mounted directories (`~/work`, `~/.Xilinx`, `[[mounts]]`).
+It also contains the container's passwords and SSH host keys, so only share it with people who may
+know them. `casperbox-dev commit` works the same way.
 
 ## Inside the container
 

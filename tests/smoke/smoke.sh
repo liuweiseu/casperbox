@@ -211,6 +211,23 @@ done
 check "VNC server answers after restart" RFB "${banner}"
 
 # ---------------------------------------------------------------------------
+step "Saving the container as an image with ${tool} commit"
+# ---------------------------------------------------------------------------
+snapshot="localhost/${name}:smoke-snapshot"
+commit_args=("${snapshot}")
+# The toolflow image is large; only save the dev image to a tar file
+[[ "${tool}" == casperbox-dev ]] && commit_args+=(-o "${work}/snapshot.tar")
+"${tool}" commit "${commit_args[@]}"
+check "Snapshot keeps the changes made in the container" kept \
+    "$(podman run --rm --entrypoint cat "${snapshot}" /home/casper/restart-marker 2>&1 || true)"
+check "Snapshot has no casperbox build hash" "" \
+    "$(podman image inspect -f '{{index .Labels "casperbox.build-hash"}}' "${snapshot}" 2>&1 || true)"
+if [[ "${tool}" == casperbox-dev ]]; then
+    check "Snapshot saved to a tar file" yes "$( [[ -s "${work}/snapshot.tar" ]] && echo yes || echo no)"
+fi
+podman rmi -f "${snapshot}" >/dev/null || true
+
+# ---------------------------------------------------------------------------
 step "Status and ps"
 # ---------------------------------------------------------------------------
 "${tool}" status

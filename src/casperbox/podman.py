@@ -23,6 +23,7 @@ LABEL_TOOLFLOW = "casperbox.toolflow"  # casperbox containers
 LABEL_OS = "casperbox.os"  # casperbox-dev containers
 # Label put on images: hash of the build inputs, used to detect outdated images
 LABEL_BUILD_HASH = "casperbox.build-hash"
+LABEL_SNAPSHOT_OF = "casperbox.snapshot-of"  # images made by `commit`: source container
 
 # Environment passed to the container. Values are put in podman's own environment
 # and referenced by name (-e NAME), so passwords never appear on a command line.
@@ -372,3 +373,17 @@ def run_args(cfg: Config) -> list[str]:
 
 def remove_container(name: str) -> None:
     run(["podman", "rm", "--force", "--time", "10", name])
+
+
+def commit_args(container: str, image: str) -> list[str]:
+    """`podman commit` of a container into an image.
+
+    The casperbox labels are cleared: the snapshot is not an image casperbox built (so `up`
+    never mistakes it for an up-to-date build), and containers started from it with
+    `podman run` must not show up in `casperbox ps` as managed containers.
+    """
+    cmd = ["podman", "commit"]
+    for label in (LABEL_BUILD_HASH, LABEL_MANAGED, LABEL_CONFIG, LABEL_KIND):
+        cmd += ["--change", f"LABEL {label}="]
+    cmd += ["--change", f"LABEL {LABEL_SNAPSHOT_OF}={container}"]
+    return [*cmd, container, image]

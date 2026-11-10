@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -386,6 +387,45 @@ def make_app(kind: str) -> typer.Typer:
         if follow:
             cmd.append("-f")
         podman.exec_([*cmd, cfg.name])
+
+    @app.command()
+    def commit(
+        ctx: typer.Context,
+        image: Annotated[str | None, typer.Argument(
+            help="Image name[:tag]; default localhost/<container>:snapshot-<date>-<time>")] = None,
+        config: Path | None = config_opt,
+        output: Annotated[Path | None, typer.Option(
+            "--output", "-o", help="Also save the image to this tar file (load it with `podman load -i FILE`)")] = None,
+        force: Annotated[bool, typer.Option("--force", help="Overwrite the --output file if it exists")] = False,
+    ) -> None:
+        """Save the container, with the changes made in it, as an image (optionally to a tar file)."""
+        cfg = prepare(ctx, config)
+        own = podman.get_container(cfg.name)
+        if not own:
+            raise CasperError(f"Container {cfg.name} does not exist, please run: {tool} up")
+        podman.check_owner(cfg, own)
+        if output:
+            output = output.expanduser().resolve()
+            if output.exists() and not force:
+                raise CasperError(f"{output} already exists; use --force to overwrite it")
+            if not output.parent.is_dir():
+                raise CasperError(f"Directory does not exist: {output.parent}")
+        image = image or f"localhost/{cfg.name.lower()}:snapshot-{datetime.now():%Y%m%d-%H%M%S}"
+
+        kept = kept_paths(cfg)
+        if kept:
+            warn(f"Mounted directories are not part of the image: {', '.join(kept)}")
+        warn("The image contains the container's passwords (user and VNC) and SSH host keys; "
+             "only share it with people who may know them")
+        info(f"Committing container {cfg.name} ({own.state}) to image {image}")
+        podman.run(podman.commit_args(cfg.name, image))
+        info(f"Image created: {image}")
+        if output:
+            if output.exists():
+                output.unlink()
+            info(f"Saving {image} to {output} (this can take a while)")
+            podman.run(["podman", "save", "-o", str(output), image])
+            info(f"Saved: {output}; load it on another machine with: podman load -i {output.name}")
 
     @app.command("config")
     def config_cmd(ctx: typer.Context, config: Path | None = config_opt) -> None:
