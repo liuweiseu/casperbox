@@ -133,6 +133,17 @@ check "SSH password login (port ${ssh_port})" casper "$(ssh_run whoami 2>&1 || t
 banner="$(timeout 10 bash -c "exec 3<>/dev/tcp/127.0.0.1/${vnc_port}; head -c 3 <&3" 2>/dev/null || true)"
 check "VNC server answers (port ${vnc_port})" RFB "${banner}"
 
+# The XFCE desktop came up (a broken session leaves a black screen with VNC still answering)
+panel=no
+for _ in $(seq 30); do
+    panel="$(ssh_run 'pgrep -x xfce4-panel >/dev/null && echo yes || echo no' 2>/dev/null || true)"
+    [[ "${panel}" == yes ]] && break
+    sleep 2
+done
+check "XFCE desktop running (xfce4-panel)" yes "${panel}"
+check "Desktop session bus is the system dbus" no \
+    "$(ssh_run 'pgrep -af dbus-daemon | grep -q /opt/conda && echo yes || echo no')"
+
 check "MAC address of eth0" "${mac}" "$(ssh_run cat /sys/class/net/eth0/address 2>&1 || true)"
 check "Host UID/GID inside the container (keep-id)" "$(id -u):$(id -g)" "$(ssh_run 'echo $(id -u):$(id -g)' 2>&1 || true)"
 check "Read-only mount ~/data" "hello from the host" "$(ssh_run cat data/hello.txt 2>&1 || true)"

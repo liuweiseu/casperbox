@@ -1,9 +1,22 @@
 #!/bin/sh
 # TigerVNC session startup: XFCE desktop
+#
+# vncserver is started from a login shell, so this script inherits the toolflow environment
+# (conda env, Vivado settings). The desktop must run on the system tools instead: the conda env
+# has its own dbus (pulled in by pyqt6), and its dbus-launch starts a session bus that cannot
+# find the XFCE services, which leaves a black desktop. Terminals opened on the desktop run
+# ~/.bashrc and load the toolflow environment again.
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 export XDG_SESSION_TYPE=x11
 
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+for var in $(env | sed -n 's/^\(CONDA[A-Za-z_]*\|_CE_[A-Za-z_]*\)=.*/\1/p'); do
+    unset "$var"
+done
+# Let terminals load Vivado's settings64.sh again (its PATH entries were dropped above)
+unset CASPER_VIVADO_LOADED LD_PRELOAD
+
 [ -r "$HOME/.Xresources" ] && xrdb "$HOME/.Xresources"
 
-exec dbus-launch --exit-with-session startxfce4
+exec /usr/bin/dbus-launch --exit-with-session /usr/bin/startxfce4
