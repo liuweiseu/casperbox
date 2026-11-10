@@ -295,3 +295,18 @@ def test_check_owner_messages(env):
     with pytest.raises(CasperError, match="created by /other/casper-dev.toml") as e:
         check_owner(cfg, other)
     assert "`casperbox-dev ps`" in str(e.value)
+
+
+def test_apt_mirror(env, monkeypatch):
+    from casperbox import podman
+
+    assert env().apt_mirror == ""
+    cfg = env(build__apt_mirror="http://us.archive.ubuntu.com/ubuntu/")
+    assert cfg.apt_mirror == "http://us.archive.ubuntu.com/ubuntu"
+    assert "APT_MIRROR=http://us.archive.ubuntu.com/ubuntu" in podman.build_args(cfg)
+    assert podman.build_hash(cfg) != podman.build_hash(env())  # changing the mirror rebuilds
+    for bad in ("ftp://mirror/ubuntu", "us.archive.ubuntu.com/ubuntu", "http://host/a b", "http://h/#x"):
+        with pytest.raises(CasperError, match="build.apt_mirror"):
+            env(build__apt_mirror=bad)
+    with pytest.raises(CasperError, match="Unknown key"):
+        env(build__mirror="http://x/ubuntu")

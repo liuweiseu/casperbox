@@ -129,3 +129,9 @@ def test_dev_mounts_must_exist_and_be_readable(dev):
         (dev.tmp / "locked").chmod(0o700)
     if os.geteuid() != 0:
         assert any("no read permission" in w for w in cfg.warnings)
+
+
+def test_dev_apt_mirror(dev):
+    assert dev().apt_mirror == ""
+    cfg = dev(build={"apt_mirror": "https://mirrors.ocf.berkeley.edu/ubuntu"})
+    assert "APT_MIRROR=https://mirrors.ocf.berkeley.edu/ubuntu" in build_args(cfg)

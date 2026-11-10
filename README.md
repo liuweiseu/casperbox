@@ -74,6 +74,7 @@ Relative paths in it are relative to the file's directory.
 | `ports.bind_address` | `0.0.0.0` | |
 | `ports.ssh` / `ports.vnc` | `2222` / `5901` | Host ports for container 22 / 5901 |
 | `vnc.geometry` | `1920x1080` | |
+| `build.apt_mirror` | default servers | Ubuntu apt mirror for the image build, e.g. `http://us.archive.ubuntu.com/ubuntu` |
 | `[[mounts]]` | | Extra mounts: `host`, `container` (`~/` = home), `mode` |
 | `[[extra_ports]]` | | Extra ports: `host`, `container`, `protocol` |
 
@@ -162,7 +163,7 @@ casperbox-dev up
 casperbox-dev shell
 ```
 
-`casper-dev.toml` has the same `[container]`, `[ports]`, `[vnc]`, `[[mounts]]` and `[[extra_ports]]`
+`casper-dev.toml` has the same `[container]`, `[ports]`, `[vnc]`, `[build]`, `[[mounts]]` and `[[extra_ports]]`
 sections as `casperbox.toml`, plus:
 
 | Key | Default | Description |

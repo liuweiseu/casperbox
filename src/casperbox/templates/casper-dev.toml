@@ -45,6 +45,15 @@ vnc = 5902                 # -> container 5901
 [vnc]
 geometry = "1920x1080"
 
+[build]
+# apt mirror used to build the image (also kept in the image for `sudo apt` in the container).
+# Replaces archive.ubuntu.com and security.ubuntu.com; empty = default Ubuntu servers.
+# Set it if those servers are slow or unreachable from your network, e.g.
+#   apt_mirror = "http://us.archive.ubuntu.com/ubuntu"
+#   apt_mirror = "http://mirrors.ocf.berkeley.edu/ubuntu"
+# Changing it rebuilds the image on the next `up`.
+apt_mirror = ""
+
 # No directories are mounted by default; add the ones you need (repeat the block for more)
 # [[mounts]]
 # host = "~/projects"

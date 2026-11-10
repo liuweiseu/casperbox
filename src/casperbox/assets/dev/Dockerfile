@@ -15,6 +15,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Build args are declared right before the step that uses them, so that changing
 # one only invalidates the build cache from that step on.
 
+# 0. apt mirror ([build] apt_mirror in the config; empty = the base image's default sources)
+ARG APT_MIRROR=""
+COPY common/scripts/set_apt_mirror.sh /opt/casper/scripts/
+RUN bash /opt/casper/scripts/set_apt_mirror.sh
+
 # 1. Base packages: openssh-server / tigervnc / XFCE desktop / sudo
 COPY dev/base.list /opt/casper/packages/base.list
 COPY common/scripts/apt_update.sh common/scripts/install_pkg_list.sh common/scripts/install_base.sh /opt/casper/scripts/

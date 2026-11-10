@@ -356,6 +356,7 @@ def make_app(kind: str) -> typer.Typer:
             rows.append(("patch.sh", str(cfg.toolflow.patch_script or "-")))
         else:
             rows += [("os", cfg.base_image), ("packages", " ".join(cfg.packages) or "-")]
+        rows.append(("apt mirror", cfg.apt_mirror or "default"))
         rows += [
             ("image", cfg.image),
             ("container", cfg.name),

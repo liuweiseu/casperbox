@@ -38,6 +38,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # RUN instructions use /bin/sh: podman builds OCI images, which ignore the SHELL instruction.
 # Keep RUN lines POSIX; anything that needs bash goes into a script run with `bash script.sh`.
 
+# 0. apt mirror ([build] apt_mirror in the config; empty = the base image's default sources)
+ARG APT_MIRROR=""
+COPY common/scripts/set_apt_mirror.sh /opt/casper/scripts/
+RUN bash /opt/casper/scripts/set_apt_mirror.sh
+
 # 1. Base packages for every version: openssh-server / tigervnc / firefox / desktop / tools
 COPY common/packages/software.list /opt/casper/packages/
 COPY common/scripts/apt_update.sh common/scripts/install_pkg_list.sh common/scripts/install_base.sh /opt/casper/scripts/

@@ -100,6 +100,7 @@ def _build_arg_values(cfg: Config) -> dict[str, str]:
         args = {"BASE_IMAGE": cfg.base_image, "PACKAGES": " ".join(cfg.packages)}
     return {
         **args,
+        "APT_MIRROR": cfg.apt_mirror,
         "CONTAINER_USER": cfg.user,
         "USER_UID": str(os.getuid()),
         "USER_GID": str(os.getgid()),

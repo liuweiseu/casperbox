@@ -1,6 +1,6 @@
 """Config files: casperbox.toml (toolflow containers) and casper-dev.toml (dev containers).
 
-Both share [container], [ports], [vnc], [[mounts]] and [[extra_ports]]; casperbox.toml adds
+Both share [container], [ports], [vnc], [build], [[mounts]] and [[extra_ports]]; casperbox.toml adds
 the toolflow version, [vivado] and [paths]; casper-dev.toml adds the base OS and packages.
 """
 
@@ -68,6 +68,7 @@ class Config:
     ssh_port: int
     vnc_port: int
     vnc_geometry: str
+    apt_mirror: str = ""  # [build] apt_mirror; empty = the base image's default sources
     mounts: list[Mount] = field(default_factory=list)
     extra_ports: list[PortMap] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -234,6 +235,8 @@ _MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
 _GEOMETRY_RE = re.compile(r"^[0-9]+x[0-9]+$")
 _SHM_RE = re.compile(r"^[0-9]+[bkmgBKMG]?$")
 # apt package name, optionally with :arch and/or =version
+# apt mirror URL: http(s)://host[:port][/path], no characters that need quoting
+_APT_MIRROR_RE = re.compile(r"^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$")
 _PACKAGE_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]*(:[a-z0-9-]+)?(=[A-Za-z0-9.+~:-]+)?$")
 
 
@@ -396,6 +399,18 @@ def _parse_network(top: _Table, default_ports: tuple[int, int]) -> dict[str, Any
     }
 
 
+def _parse_build(top: _Table) -> dict[str, Any]:
+    b = top.table("build")
+    apt_mirror = b.get("apt_mirror", str, "").strip()
+    b.finish()
+    if apt_mirror and not _APT_MIRROR_RE.match(apt_mirror):
+        raise CasperError(
+            f"Invalid build.apt_mirror: {apt_mirror!r}; expected an http(s) URL of an Ubuntu mirror, "
+            "e.g. 'http://us.archive.ubuntu.com/ubuntu'"
+        )
+    return {"apt_mirror": apt_mirror.rstrip("/")}
+
+
 def _parse_mounts(top: _Table, base: Path, user: str, reserved: set[str], warnings: list[str]) -> list[Mount]:
     home = f"/home/{user}"
     reserved = {*reserved, home}
@@ -469,6 +484,7 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
         _check_readable(work_dir, "paths.work_dir", warnings)
 
     network = _parse_network(top, DEFAULT_PORTS[RELEASE])
+    build = _parse_build(top)
     home = f"/home/{user}"
     mounts = _parse_mounts(top, base, user, {str(vivado_dir), f"{home}/.Xilinx", f"{home}/work", f"{home}/toolflow"}, warnings)
     top.finish()
@@ -478,6 +494,7 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
         path=cfg_path,
         **container,
         **network,
+        **build,
         mounts=mounts,
         warnings=warnings,
         toolflow=toolflow,
@@ -507,6 +524,7 @@ def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
 
     container = _parse_container(top, f"casper-dev-{os_slug(os_image)}", warnings)
     network = _parse_network(top, DEFAULT_PORTS[DEV])
+    build = _parse_build(top)
     mounts = _parse_mounts(top, base, container["user"], set(), warnings)
     top.finish()
 
@@ -515,6 +533,7 @@ def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
         path=cfg_path,
         **container,
         **network,
+        **build,
         mounts=mounts,
         warnings=warnings,
         os=os_image,

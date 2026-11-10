@@ -8,7 +8,8 @@
 #   tests/smoke/smoke.sh casperbox-dev [--os IMAGE]
 #
 # Requires: the casperbox tools on PATH, rootless podman + pasta, sshpass, curl.
-# Host ports can be changed with SMOKE_SSH_PORT / SMOKE_VNC_PORT / SMOKE_HTTP_PORT.
+# Host ports can be changed with SMOKE_SSH_PORT / SMOKE_VNC_PORT / SMOKE_HTTP_PORT;
+# SMOKE_APT_MIRROR sets [build] apt_mirror (and checks that the image uses it).
 # The test container is called smoke-<tool> and is removed at the end.
 # SC2016: commands in single quotes are expanded inside the container, not here.
 # SC2088: "~/..." only appears in messages.
@@ -35,6 +36,7 @@ done
 ssh_port="${SMOKE_SSH_PORT:-22022}"
 vnc_port="${SMOKE_VNC_PORT:-25901}"
 http_port="${SMOKE_HTTP_PORT:-28888}"
+apt_mirror="${SMOKE_APT_MIRROR:-}"
 name="smoke-${tool}"
 password="casper"
 mac="02:11:22:33:44:55"
@@ -83,7 +85,8 @@ fi
 sed -i -e "s|^name = \".*\"|name = \"${name}\"|" \
        -e "s|^mac = \"\"|mac = \"${mac}\"|" \
        -e "s|^ssh = [0-9]*|ssh = ${ssh_port}|" \
-       -e "s|^vnc = [0-9]*|vnc = ${vnc_port}|" "${config}"
+       -e "s|^vnc = [0-9]*|vnc = ${vnc_port}|" \
+       -e "s|^apt_mirror = \"\"|apt_mirror = \"${apt_mirror}\"|" "${config}"
 cat >> "${config}" <<EOF
 
 [[mounts]]
@@ -135,6 +138,10 @@ check "Host UID/GID inside the container (keep-id)" "$(id -u):$(id -g)" "$(ssh_r
 check "Read-only mount ~/data" "hello from the host" "$(ssh_run cat data/hello.txt 2>&1 || true)"
 check "Mount is read-only" denied "$(ssh_run 'touch data/x 2>/dev/null && echo written || echo denied')"
 check "sudo with the container password" root "$(ssh_run "echo ${password} | sudo -S -p '' whoami" 2>&1 || true)"
+if [[ -n "${apt_mirror}" ]]; then
+    check "apt sources use build.apt_mirror" yes \
+        "$(ssh_run "grep -rqsF '${apt_mirror%/}/' /etc/apt/sources.list /etc/apt/sources.list.d && echo yes || echo no")"
+fi
 check "Firefox installed" yes "$(ssh_login 'command -v firefox >/dev/null && echo yes || echo no')"
 
 # Extra forwarded port: serve a file from the container and fetch it from the host

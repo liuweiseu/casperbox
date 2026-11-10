@@ -73,6 +73,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-podman
       - name: Smoke test
+        # GitHub's Azure Ubuntu mirror: fast from the runners, and tests build.apt_mirror
+        env:
+          SMOKE_APT_MIRROR: http://azure.archive.ubuntu.com/ubuntu
         run: tests/smoke/smoke.sh casperbox-dev --os "${{ matrix.os }}"
 
   toolflow-container:
@@ -88,4 +91,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-podman
       - name: Smoke test
+        env:
+          SMOKE_APT_MIRROR: http://azure.archive.ubuntu.com/ubuntu
         run: tests/smoke/smoke.sh casperbox
