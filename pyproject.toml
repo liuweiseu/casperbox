@@ -1,6 +1,6 @@
 [project]
 name = "casperbox"
-version = "0.3.3"
+version = "0.3.4"
 description = "Build and run CASPER toolflow (and plain dev) containers with rootless podman"
 readme = "README.md"
 requires-python = ">=3.11"
