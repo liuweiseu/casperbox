@@ -150,8 +150,18 @@ check "Extra port ${http_port} -> 8888" "hello from the host" "${body}"
 if [[ "${tool}" == casperbox ]]; then
     check "conda env active in login shells" casper "$(ssh_login 'echo ${CONDA_DEFAULT_ENV:-}')"
     check "XILINX_PATH points to the Vivado mount" "${work}/xilinx/Vivado/2021.1" "$(ssh_login 'echo ${XILINX_PATH:-}')"
-    check "mlib_devel cloned, startsg.local generated" yes \
-        "$(ssh_run 'test -f toolflow/mlib_devel/startsg.local && echo yes || echo no')"
+    check "mlib_devel cloned" yes "$(ssh_run 'test -f toolflow/mlib_devel/startsg && echo yes || echo no')"
+    check "~/.startsg.local generated" yes "$(ssh_run 'test -f .startsg.local && echo yes || echo no')"
+    check "~/.bashrc sources ~/.startsg.local" yes \
+        "$(ssh_run 'grep -qF "source ~/.startsg.local" .bashrc && echo yes || echo no')"
+    check "startsg linked in ~/.local/bin" "/home/casper/toolflow/mlib_devel/startsg" \
+        "$(ssh_run 'readlink .local/bin/startsg')"
+    check "JASPER_BACKEND set from ~/.startsg.local" vivado "$(ssh_login 'echo ${JASPER_BACKEND:-}')"
+    check "MATLAB_PATH set to /tmp" /tmp "$(ssh_login 'echo ${MATLAB_PATH:-}')"
+    check "FRONTEND set to scilab" scilab "$(ssh_login 'echo ${FRONTEND:-}')"
+    check "CASPER_DEBUG set to off" off "$(ssh_login 'echo ${CASPER_DEBUG:-}')"
+    check "pyqt6, pyqtgraph, rich importable" yes \
+        "$(ssh_login 'QT_QPA_PLATFORM=offscreen python -c "import PyQt6.QtWidgets, pyqtgraph, rich" && echo yes || echo no')"
     check "device-tree-xlnx cloned" yes "$(ssh_run 'test -d toolflow/device-tree-xlnx && echo yes || echo no')"
     check "scilab on PATH" "/home/casper/.local/bin/scilab" "$(ssh_login 'command -v scilab')"
     # versions/m2021a/pkgs.list (Vivado runtime dependencies) was installed

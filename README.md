@@ -116,13 +116,16 @@ casperbox ps                      # all casperbox containers, from any directory
 ## Inside the container
 
 ```
+~/.startsg.local           # generated mlib_devel config, sourced by ~/.bashrc
+~/.local/bin/startsg       # -> ~/toolflow/mlib_devel/startsg
 ~/toolflow/
-├── mlib_devel/            # includes the generated startsg.local
+├── mlib_devel/
 ├── device-tree-xlnx/
 └── src/                   # -e dependencies from requirements.txt
 ```
 
-Shells automatically load Vivado `settings64.sh` and the variables in `startsg.local`, and activate the conda env `casper`.
+Shells automatically load Vivado `settings64.sh` and the variables in `~/.startsg.local`, and activate the conda env `casper`
+(with `pyqt6`, `pyqtgraph` and `rich` installed).
 Scilab is in `/opt/scilab`; run `scilab` (linked in `~/.local/bin`).
 
 > `~/toolflow` is part of the image, not a mount. `down`/`up` recreate the container and

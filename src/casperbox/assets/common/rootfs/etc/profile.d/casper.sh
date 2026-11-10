@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# CASPER toolflow environment: Vivado, mlib_devel (startsg.local), conda env
+# CASPER toolflow environment: Vivado, mlib_devel (~/.startsg.local), conda env
 # Sourced by /etc/profile (login shells) and ~/.bashrc (interactive shells); safe to source repeatedly.
 
 # Vivado settings64.sh etc. require bash
@@ -23,9 +23,10 @@ case ":${PATH}:" in
 esac
 
 # mlib_devel local config (XILINX_PATH / JASPER_BACKEND / XLNX_DT_REPO_PATH etc.)
-if [ -r "${MLIB_DEVEL_PATH}/startsg.local" ]; then
+# (also sourced by ~/.bashrc; loaded here as well for non-interactive login shells)
+if [ -r "${HOME}/.startsg.local" ]; then
     # shellcheck disable=SC1091
-    . "${MLIB_DEVEL_PATH}/startsg.local"
+    . "${HOME}/.startsg.local"
 fi
 
 # Vivado (load once to avoid growing PATH repeatedly)
