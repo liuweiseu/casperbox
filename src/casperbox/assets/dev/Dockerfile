@@ -17,7 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # 1. Base packages: openssh-server / tigervnc / XFCE desktop / sudo
 COPY dev/base.list /opt/casper/packages/base.list
-COPY common/scripts/install_pkg_list.sh common/scripts/install_base.sh /opt/casper/scripts/
+COPY common/scripts/apt_update.sh common/scripts/install_pkg_list.sh common/scripts/install_base.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/install_base.sh /opt/casper/packages/base.list
 
 # 2. Firefox from Mozilla's APT repository (the distribution's package is a snap wrapper)

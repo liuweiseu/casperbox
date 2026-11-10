@@ -20,7 +20,7 @@ Pin: origin packages.mozilla.org
 Pin-Priority: 1000
 PREF
 
-apt-get update
+bash "$(dirname "$0")/apt_update.sh"
 apt-get install -y --no-install-recommends firefox
 apt-get clean
 rm -rf /var/lib/apt/lists/*

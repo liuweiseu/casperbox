@@ -15,7 +15,7 @@ if (( ${#entries[@]} == 0 )); then
     exit 0
 fi
 
-apt-get update
+bash "$(dirname "$0")/apt_update.sh"
 
 packages=()
 for entry in "${entries[@]}"; do

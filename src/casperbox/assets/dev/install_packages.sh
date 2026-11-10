@@ -9,7 +9,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 echo "Installing extra packages: $*"
-apt-get update
+bash "$(dirname "$0")/apt_update.sh"
 apt-get install -y --no-install-recommends "$@"
 apt-get clean
 rm -rf /var/lib/apt/lists/*

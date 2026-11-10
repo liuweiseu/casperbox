@@ -40,7 +40,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # 1. Base packages for every version: openssh-server / tigervnc / firefox / desktop / tools
 COPY common/packages/software.list /opt/casper/packages/
-COPY common/scripts/install_pkg_list.sh common/scripts/install_base.sh /opt/casper/scripts/
+COPY common/scripts/apt_update.sh common/scripts/install_pkg_list.sh common/scripts/install_base.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/install_base.sh /opt/casper/packages/software.list
 
 # 1b. Packages this version needs in addition (versions/<version>/pkgs.list, optional),
