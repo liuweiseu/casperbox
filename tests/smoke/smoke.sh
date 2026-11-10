@@ -182,6 +182,24 @@ if [[ "${tool}" == casperbox ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+step "Restarting the container with ${tool} restart (data must be kept)"
+# ---------------------------------------------------------------------------
+ssh_run 'echo kept > restart-marker' || true
+"${tool}" restart
+for _ in $(seq 60); do
+    ssh_run true 2>/dev/null && break
+    sleep 2
+done
+check "File outside the mounts kept after restart" kept "$(ssh_run 'cat restart-marker' 2>&1 || true)"
+banner=""
+for _ in $(seq 15); do
+    banner="$(timeout 10 bash -c "exec 3<>/dev/tcp/127.0.0.1/${vnc_port}; head -c 3 <&3" 2>/dev/null || true)"
+    [[ "${banner}" == RFB ]] && break
+    sleep 2
+done
+check "VNC server answers after restart" RFB "${banner}"
+
+# ---------------------------------------------------------------------------
 step "Status and ps"
 # ---------------------------------------------------------------------------
 "${tool}" status

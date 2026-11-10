@@ -80,8 +80,13 @@ Relative paths in it are relative to the file's directory.
 
 Unknown keys and wrong types (e.g. a port written as a string) are reported as errors, and so are
 mounted directories that do not exist. Problems that do not stop the container from starting, such as a
-mounted path you cannot read, are warnings: `up` and `restart` then ask before creating the container
+mounted path you cannot read, are warnings: `up` then asks before creating the container
 (answer `y` to continue; `--yes` skips the question, e.g. in scripts).
+
+If the container already exists, `up` asks before removing and recreating it: changes made in the
+container outside the mounted directories (packages installed with apt, edits in `~/toolflow`, ...) are
+lost. `--yes` skips this question too. `restart` only stops and starts the container: nothing is lost,
+but config changes are only applied by `up`.
 
 ### Several containers
 
@@ -105,7 +110,7 @@ casperbox ps                      # all casperbox containers, from any directory
 | `casperbox build [--no-cache]` | Build the image |
 | `casperbox up [--yes]` | Start (recreate) the container; builds the image if missing or outdated |
 | `casperbox down` | Stop and remove the container |
-| `casperbox restart [--yes]` | `down` + `up` |
+| `casperbox restart` | Stop and start the container; its data is kept, config changes are not applied |
 | `casperbox shell` | Open a login shell as the container user |
 | `casperbox status` | Container status and ports |
 | `casperbox logs [-f]` | Container logs |

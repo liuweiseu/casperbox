@@ -45,6 +45,11 @@ def warn(msg: str) -> None:
     typer.echo(msg, err=True)
 
 
+def stdin_is_tty() -> bool:
+    """Whether questions can be asked (separate function so that tests can replace it)."""
+    return sys.stdin.isatty()
+
+
 def error(msg: str) -> None:
     typer.secho("[ERROR] ", fg=typer.colors.RED, nl=False, err=True)
     typer.echo(msg, err=True)
@@ -214,7 +219,7 @@ def make_app(kind: str) -> typer.Typer:
         """Ask before creating a container when the config produced warnings."""
         if not cfg.warnings or yes:
             return
-        if not sys.stdin.isatty():
+        if not stdin_is_tty():
             raise CasperError(
                 f"{len(cfg.warnings)} warning(s) above; not continuing without confirmation "
                 "(stdin is not a terminal). Fix them, or pass --yes to continue anyway."
@@ -223,11 +228,45 @@ def make_app(kind: str) -> typer.Typer:
             info("Aborted, nothing was changed")
             raise typer.Exit(1)
 
-    def do_up(cfg: Config) -> None:
+    def kept_paths(cfg: Config) -> list[str]:
+        """Container paths of the mounted directories (their files survive a recreate)."""
+        paths = []
+        if cfg.kind == RELEASE:
+            paths += [f"{cfg.home}/work", f"{cfg.home}/.Xilinx"]
+        paths += [m.container for m in cfg.mounts]
+        return [f"~{p[len(cfg.home):]}" if p.startswith(f"{cfg.home}/") else p for p in paths]
+
+    def confirm_recreate(cfg: Config, own: podman.ContainerInfo, yes: bool) -> None:
+        """Ask before removing an existing container: what is not in a mount is lost."""
+        if yes:
+            return
+        kept = kept_paths(cfg)
+        warn(
+            f"Container {cfg.name} already exists ({own.state}). It will be removed and created again "
+            f"from {cfg.path.name}:\n"
+            "  - changes made in the container outside the mounted directories are lost\n"
+            "    (e.g. packages installed with apt, edits in ~/toolflow or other files in the home directory)\n"
+            "  - programs running in it and SSH/VNC sessions are stopped\n"
+            + (f"  Kept: files in the mounted directories ({', '.join(kept)})\n" if kept
+               else "  No directories are mounted, so nothing in the container is kept\n")
+            + f"  To only restart it and keep its data, run `{tool} restart` instead."
+        )
+        if not stdin_is_tty():
+            raise CasperError(
+                f"Container {cfg.name} already exists; not recreating it without confirmation "
+                "(stdin is not a terminal). Pass --yes to recreate it."
+            )
+        if not typer.confirm(f"Remove and recreate container {cfg.name}?", default=False):
+            info("Aborted, nothing was changed")
+            raise typer.Exit(1)
+
+    def do_up(cfg: Config, yes: bool) -> None:
         own = podman.get_container(cfg.name)
         if own:
             podman.check_owner(cfg, own)
         podman.check_ports_free(cfg, own)
+        if own:
+            confirm_recreate(cfg, own, yes)  # before a possibly long image build
 
         state = podman.image_state(cfg)
         if state == "missing":
@@ -246,10 +285,12 @@ def make_app(kind: str) -> typer.Typer:
             info(f"Recreating container {cfg.name}")
             podman.remove_container(cfg.name)
         podman.run(podman.run_args(cfg), env=podman.container_env(cfg))
+        print_access(cfg, "is up")
 
+    def print_access(cfg: Config, what: str) -> None:
         host = "localhost" if cfg.bind_address in ("0.0.0.0", "::") else cfg.bind_address
         cfg_arg = "" if cfg.path == Path.cwd() / default_name else f" -c {shlex.quote(str(cfg.path))}"
-        typer.echo(f"\nContainer {cfg.name} is up ({cfg.describe})")
+        typer.echo(f"\nContainer {cfg.name} {what} ({cfg.describe})")
         typer.echo(f"  SSH  : ssh -p {cfg.ssh_port} {cfg.user}@{host}")
         typer.echo(f"  VNC  : {host}:{cfg.vnc_port}")
         typer.echo(f"  Shell: {tool}{cfg_arg} shell")
@@ -260,12 +301,13 @@ def make_app(kind: str) -> typer.Typer:
     def up(
         ctx: typer.Context,
         config: Path | None = config_opt,
-        yes: Annotated[bool, typer.Option("--yes", "-y", help="Do not ask for confirmation on warnings")] = False,
+        yes: Annotated[bool, typer.Option(
+            "--yes", "-y", help="Do not ask for confirmation (warnings, recreating an existing container)")] = False,
     ) -> None:
-        """Start the container (builds the image if missing or outdated, recreates an existing container)."""
+        """Start the container (builds the image if missing or outdated; asks before recreating an existing one)."""
         cfg = prepare(ctx, config)
         confirm_warnings(cfg, yes)
-        do_up(cfg)
+        do_up(cfg, yes)
 
     @app.command()
     def down(ctx: typer.Context, config: Path | None = config_opt) -> None:
@@ -282,16 +324,17 @@ def make_app(kind: str) -> typer.Typer:
         info(f"Container {cfg.name} removed")
 
     @app.command()
-    def restart(
-        ctx: typer.Context,
-        config: Path | None = config_opt,
-        yes: Annotated[bool, typer.Option("--yes", "-y", help="Do not ask for confirmation on warnings")] = False,
-    ) -> None:
-        """Recreate the container (re-reads the config)."""
+    def restart(ctx: typer.Context, config: Path | None = config_opt) -> None:
+        """Stop and start the container again, keeping its data (config changes need `up`)."""
         cfg = prepare(ctx, config)
-        confirm_warnings(cfg, yes)  # before removing the old container
-        do_down(cfg)
-        do_up(cfg)
+        own = podman.get_container(cfg.name)
+        if not own:
+            raise CasperError(f"Container {cfg.name} does not exist, please run: {tool} up")
+        podman.check_owner(cfg, own)
+        info(f"Restarting container {cfg.name} ({own.state}); its data is kept")
+        podman.run(["podman", "restart", cfg.name])
+        info(f"The container keeps the settings it was created with; run `{tool} up` to apply config changes")
+        print_access(cfg, "restarted")
 
     @app.command()
     def shell(ctx: typer.Context, config: Path | None = config_opt) -> None:
