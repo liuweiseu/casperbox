@@ -11,7 +11,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any
 
-from .config import DEV_TESTED_OS, RELEASE, TOOL_NAMES, Config, PortMap
+from .config import DEV_TESTED_OS, RELEASE, TOOL_NAMES, Config, PortMap, cpuset_cores
 from .errors import CasperError
 from .versions import assets_dir
 
@@ -258,6 +258,85 @@ def container_mounts(name: str) -> list[MountInfo]:
     return mounts
 
 
+def container_limits(name: str) -> dict[str, str]:
+    """Resource limits of an existing container (only the ones that are set)."""
+    fmt = "{{.HostConfig.Memory}}|{{.HostConfig.NanoCpus}}|{{.HostConfig.CpusetCpus}}"
+    out = _output(["podman", "container", "inspect", "--format", fmt, name], check=False).strip()
+    parts = out.split("|")
+    if len(parts) != 3:
+        return {}
+    limits = {}
+    try:
+        if int(parts[0] or 0):
+            limits["memory"] = f"{int(parts[0]) / 2**30:g}g"
+        if int(parts[1] or 0):
+            limits["cpus"] = f"{int(parts[1]) / 1e9:g}"
+    except ValueError:
+        pass
+    if parts[2]:
+        limits["cpuset"] = parts[2]
+    return limits
+
+
+# ---------------------------------------------------------------------------
+# Resource limits
+# ---------------------------------------------------------------------------
+
+def limit_args(cfg: Config) -> list[str]:
+    """podman run options for container.memory / cpus / cpuset (none when they are not set)."""
+    args = []
+    if cfg.memory:
+        # Same value for --memory-swap: no swap on top of the limit, which would slow the whole host down
+        args += ["--memory", cfg.memory, "--memory-swap", cfg.memory]
+    if cfg.cpus:
+        args += ["--cpus", f"{cfg.cpus:g}"]
+    if cfg.cpuset:
+        args += ["--cpuset-cpus", cfg.cpuset]
+    return args
+
+
+# config key -> cgroup controller it needs
+LIMIT_CONTROLLERS = {"memory": "memory", "cpus": "cpu", "cpuset": "cpuset"}
+
+DELEGATE_HELP = """Ask the administrator to delegate the cgroup controllers to regular users (once per host):
+  sudo mkdir -p /etc/systemd/system/user@.service.d
+  printf '[Service]\\nDelegate=cpu cpuset io memory pids\\n' | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
+  sudo systemctl daemon-reload
+then log out and in again (all your sessions). Or remove the limit from the config."""
+
+
+def check_limits(cfg: Config) -> None:
+    """Check that the host can apply the configured resource limits (does nothing without limits)."""
+    keys = [k for k in LIMIT_CONTROLLERS if getattr(cfg, k)]
+    if not keys:
+        return
+    names = ", ".join(f"container.{k}" for k in keys)
+    version = _output(["podman", "info", "--format", "{{.Host.CgroupsVersion}}"], check=False).strip()
+    if version != "v2":
+        raise CasperError(
+            f"{names} need cgroup v2, but this host uses cgroup {version or '(unknown)'}: rootless podman "
+            "cannot limit resources on it. Remove the limit from the config, or switch the host to cgroup v2."
+        )
+    raw = _output(["podman", "info", "--format", "{{json .Host.CgroupControllers}}"], check=False).strip()
+    try:
+        available = set(json.loads(raw) or []) if raw else set()
+    except json.JSONDecodeError:
+        available = set()
+    missing = [k for k in keys if LIMIT_CONTROLLERS[k] not in available]
+    if missing:
+        controllers = ", ".join(LIMIT_CONTROLLERS[k] for k in missing)
+        raise CasperError(
+            f"{', '.join(f'container.{k}' for k in missing)} need the cgroup controller(s) {controllers}, "
+            f"which are not delegated to your user (available: {', '.join(sorted(available)) or 'none'}).\n"
+            + DELEGATE_HELP
+        )
+    ncpu = os.cpu_count() or 0
+    if ncpu and cfg.cpus > ncpu:
+        raise CasperError(f"container.cpus = {cfg.cpus:g}, but the host has only {ncpu} CPUs")
+    if ncpu and cfg.cpuset and max(cpuset_cores(cfg.cpuset)) >= ncpu:
+        raise CasperError(f"container.cpuset = {cfg.cpuset!r}, but the host has only CPUs 0-{ncpu - 1}")
+
+
 def check_owner(cfg: Config, info: ContainerInfo) -> None:
     """Refuse to touch a container that was created from another config file."""
     if info.config_path == str(cfg.path):
@@ -350,6 +429,7 @@ def run_args(cfg: Config) -> list[str]:
         # Do not SELinux-relabel mounted directories (avoid relabeling the Vivado install)
         "--security-opt", "label=disable",
         "--shm-size", cfg.shm_size,
+        *limit_args(cfg),
         "--restart", "unless-stopped",
     ]
     for k in container_env(cfg):

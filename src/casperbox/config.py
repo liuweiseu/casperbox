@@ -69,6 +69,10 @@ class Config:
     vnc_port: int
     vnc_geometry: str
     apt_mirror: str = ""  # [build] apt_mirror; empty = the base image's default sources
+    # Resource limits; empty/0 = no limit (podman run gets no limit options)
+    memory: str = ""  # e.g. "64g"
+    cpus: float = 0  # CPU time quota, e.g. 16 or 8.5
+    cpuset: str = ""  # CPU cores, e.g. "0-15" or "0-7,16-23"
     mounts: list[Mount] = field(default_factory=list)
     extra_ports: list[PortMap] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -234,6 +238,8 @@ _NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$")
 _MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
 _GEOMETRY_RE = re.compile(r"^[0-9]+x[0-9]+$")
 _SHM_RE = re.compile(r"^[0-9]+[bkmgBKMG]?$")
+_MEMORY_RE = re.compile(r"^[0-9]+[kmgKMG]$")
+_CPUSET_RE = re.compile(r"^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$")
 # apt package name, optionally with :arch and/or =version
 # apt mirror URL: http(s)://host[:port][/path], no characters that need quoting
 _APT_MIRROR_RE = re.compile(r"^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$")
@@ -351,11 +357,39 @@ def _parse_container(top: _Table, default_name: str, warnings: list[str]) -> dic
     if not _SHM_RE.match(shm_size):
         raise CasperError(f"Invalid container.shm_size: {shm_size!r}")
     tz = _check_no_newline(c.get("tz", str, "UTC"), "container.tz")
+    limits = _parse_limits(c)
     c.finish()
     return {
         "name": name, "user": user, "password": password, "vnc_password": vnc_password,
-        "mac": mac, "shm_size": shm_size, "tz": tz,
+        "mac": mac, "shm_size": shm_size, "tz": tz, **limits,
     }
+
+
+def _parse_limits(c: _Table) -> dict[str, Any]:
+    memory = c.get("memory", str, "").strip()
+    if memory and (not _MEMORY_RE.match(memory) or int(memory[:-1]) == 0):
+        raise CasperError(f"Invalid container.memory: {memory!r}; expected a size such as '64g' or '512m'")
+    cpus = c.get("cpus", object, 0)
+    if isinstance(cpus, bool) or not isinstance(cpus, int | float) or cpus < 0:
+        raise CasperError(f"container.cpus must be a number >= 0 (0 = no limit), got {cpus!r}")
+    cpuset = c.get("cpuset", str, "").replace(" ", "")
+    if cpuset:
+        if not _CPUSET_RE.match(cpuset):
+            raise CasperError(f"Invalid container.cpuset: {cpuset!r}; expected cores such as '0-15' or '0-7,16-23'")
+        for part in cpuset.split(","):
+            lo, _, hi = part.partition("-")
+            if hi and int(hi) < int(lo):
+                raise CasperError(f"Invalid container.cpuset: {cpuset!r}; range {part} is reversed")
+    return {"memory": memory.lower(), "cpus": float(cpus), "cpuset": cpuset}
+
+
+def cpuset_cores(cpuset: str) -> list[int]:
+    """CPU core numbers of a cpuset string such as '0-3,8'."""
+    cores: list[int] = []
+    for part in filter(None, cpuset.split(",")):
+        lo, _, hi = part.partition("-")
+        cores += range(int(lo), int(hi or lo) + 1)
+    return cores
 
 
 def _parse_network(top: _Table, default_ports: tuple[int, int]) -> dict[str, Any]:

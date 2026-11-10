@@ -266,6 +266,7 @@ def make_app(kind: str) -> typer.Typer:
         if own:
             podman.check_owner(cfg, own)
         podman.check_ports_free(cfg, own)
+        podman.check_limits(cfg)
         if own:
             confirm_recreate(cfg, own, yes)  # before a possibly long image build
 
@@ -364,6 +365,8 @@ def make_app(kind: str) -> typer.Typer:
             typer.echo(f"{cfg.name}: not created")
             return
         typer.echo(f"{own.name}: {own.status}")
+        limits = podman.container_limits(own.name)
+        typer.echo("  Limits: " + (", ".join(f"{k} {v}" for k, v in limits.items()) or "none"))
         if own.ports:
             typer.echo("  Ports:")
             for p in own.ports:
@@ -451,6 +454,7 @@ def make_app(kind: str) -> typer.Typer:
                 ("license", str(cfg.license_dir)),
                 ("work", str(cfg.work_dir)),
             ]
+        rows.append(("limits", " ".join(podman.limit_args(cfg)) or "none"))
         rows.append(("network", podman.pasta_network(cfg)))
         width = max(len(k) for k, _ in rows)
         for k, v in rows:

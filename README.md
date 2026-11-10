@@ -68,6 +68,7 @@ Relative paths in it are relative to the file's directory.
 | `container.password` / `vnc_password` | `casper` | SSH/sudo and VNC (6-8 chars) passwords |
 | `container.mac` | random | MAC of `eth0` |
 | `container.shm_size` / `tz` | `2g` / `UTC` | |
+| `container.memory` / `cpus` / `cpuset` | no limit | Resource limits, e.g. `"64g"` / `16` / `"0-15"` (see [Shared servers](#shared-servers)) |
 | `vivado.dir` / `vivado.mount` | / `ro` | Vivado install, mounted at the same path |
 | `paths.license_dir` | `~/.Xilinx` | Mounted at `~/.Xilinx` |
 | `paths.work_dir` | `./work` | Mounted at `~/work` (created if missing) |
@@ -100,6 +101,31 @@ casperbox ps                      # all casperbox containers, from any directory
 ```
 
 `casperbox` refuses to recreate or remove a container that was created from a different config file.
+
+### Shared servers
+
+By default a container can use all CPUs and all memory of the host. When several users run Vivado on
+one server, give each container its own limits, so that one large run cannot take the memory of the
+others (the kernel would then kill processes of any user):
+
+```toml
+[container]
+memory = "64g"      # RAM limit (no swap on top of it); Vivado is killed in this container only
+cpuset = "0-15"     # CPU cores; Vivado sees (nproc) and uses only these
+cpus = 0            # alternatively a CPU time quota, e.g. 16 (nproc still shows all cores)
+```
+
+The limits need cgroup v2 with the controllers delegated to regular users; `up` checks this and
+stops with an error otherwise. Many distributions delegate only `memory` and `pids`. The administrator
+enables the others once per host:
+
+```bash
+sudo mkdir -p /etc/systemd/system/user@.service.d
+printf '[Service]\nDelegate=cpu cpuset io memory pids\n' | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
+sudo systemctl daemon-reload      # then users log out and in again
+```
+
+Without limits (the default) none of this is needed. `status` shows the limits of the running container.
 
 ## Commands
 

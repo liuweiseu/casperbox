@@ -14,6 +14,11 @@ vnc_password = "casper"    # 6-8 characters
 mac = ""                   # MAC of eth0, e.g. "02:42:ac:11:00:02"; empty = random
 shm_size = "2g"
 tz = "UTC"
+# Resource limits, e.g. on a server shared by several users. Empty / 0 = no limit.
+# They need cgroup v2 with the controllers delegated to users; `up` checks this.
+memory = ""                # RAM limit, e.g. "64g" (no swap on top of it)
+cpus = 0                   # CPU time quota, e.g. 16
+cpuset = ""                # CPU cores, e.g. "0-15"; better than cpus for Vivado (nproc shows only these)
 
 [vivado]
 # Vivado install directory, mounted at the same path in the container.
