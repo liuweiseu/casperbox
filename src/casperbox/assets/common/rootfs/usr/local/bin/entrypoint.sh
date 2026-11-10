@@ -85,53 +85,36 @@ find_cmd() {
 vncpasswd_cmd="$(find_cmd vncpasswd tigervncpasswd)" || vncpasswd_cmd=""
 vncserver_cmd="$(find_cmd vncserver tigervncserver)" || vncserver_cmd=""
 
-# TigerVNC >= 1.14 (e.g. Ubuntu 26.04) keeps its files in ~/.config/tigervnc and its logs in
-# ~/.local/state/tigervnc, and tries to migrate an existing ~/.vnc on start (which fails if
-# ~/.config does not exist). Older versions use ~/.vnc for both.
-tigervnc_version() {
-    local x out
-    x="$(find_cmd Xtigervnc Xvnc)" || return 0
-    # X servers may exit with a non-zero status after -version: only parse the output
-    out="$("${x}" -version 2>&1)" || true
-    sed -n 's/.*TigerVNC \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' <<<"${out}" | head -n 1
-}
-vnc_version="$(tigervnc_version)"
+# VNC files are written to ~/.vnc. TigerVNC >= 1.14 (e.g. Ubuntu 26.04) keeps them in
+# ~/.config/tigervnc instead: on start it moves ~/.vnc there and leaves a ~/.vnc symlink.
+# The move fails if ~/.config does not exist, so setup_vnc() creates it (see
+# /usr/share/perl5/TigerVNC/Config.pm). Older versions just use ~/.vnc.
+vnc_dir="${home_dir}/.vnc"
+vnc_log_dirs=("${home_dir}/.local/state/tigervnc" "${home_dir}/.config/tigervnc" "${home_dir}/.vnc")
 
-uses_xdg_dirs() {
-    # 1. by version
-    if [[ "${vnc_version}" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
-        local major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}"
-        (( major > 1 || (major == 1 && minor >= 14) )) && return 0
+# Switch to the ~/.config/tigervnc layout: create the XDG directories owned by the user and
+# move our files out of ~/.vnc ourselves, so that vncserver does not try (and fail) to migrate it
+use_xdg_dir() {
+    local new="${home_dir}/.config/tigervnc" f
+    install -d -o "${user}" -g "${group}" "${home_dir}/.config" "${home_dir}/.local" "${home_dir}/.local/state"
+    install -d -m 700 -o "${user}" -g "${group}" "${new}"
+    if [[ -d "${home_dir}/.vnc" ]]; then
+        for f in passwd xstartup; do
+            if [[ -f "${home_dir}/.vnc/${f}" && ! -f "${new}/${f}" ]]; then
+                mv "${home_dir}/.vnc/${f}" "${new}/${f}"
+            fi
+        done
+        rm -rf "${home_dir}/.vnc"
     fi
-    # 2. by the vncserver program itself (it migrates ~/.vnc to ~/.config/tigervnc)
-    local f
-    f="$(readlink -f "${vncserver_cmd}" 2>/dev/null)" || return 1
-    [[ -n "${f}" ]] && grep -aqsE 'config/tigervnc|Could not migrate' "${f}"
+    vnc_dir="${new}"
+    vnc_log_dirs=("${home_dir}/.local/state/tigervnc" "${new}")
 }
-
-if [[ -n "${vncserver_cmd}" ]] && uses_xdg_dirs; then
-    vnc_dir="${home_dir}/.config/tigervnc"
-    vnc_log_dirs=("${home_dir}/.local/state/tigervnc" "${vnc_dir}")
-else
-    vnc_dir="${home_dir}/.vnc"
-    vnc_log_dirs=("${vnc_dir}")
-fi
 
 setup_vnc() {
     [[ -n "${vncpasswd_cmd}" ]] || { log "ERROR: vncpasswd not found in the image"; return 1; }
-    log "Setting VNC password (TigerVNC ${vnc_version:-unknown version}, config in ${vnc_dir})"
-    if [[ "${vnc_dir}" != "${home_dir}/.vnc" ]]; then
-        # Create the XDG directories owned by the user, and take over an existing ~/.vnc
-        # ourselves so that vncserver does not try (and fail) to migrate it
-        install -d -o "${user}" -g "${group}" "${home_dir}/.config" "${home_dir}/.local" "${home_dir}/.local/state"
-        install -d -m 700 -o "${user}" -g "${group}" "${vnc_dir}"
-        if [[ -d "${home_dir}/.vnc" ]]; then
-            if [[ -f "${home_dir}/.vnc/xstartup" && ! -f "${vnc_dir}/xstartup" ]]; then
-                mv "${home_dir}/.vnc/xstartup" "${vnc_dir}/xstartup"
-            fi
-            rm -rf "${home_dir}/.vnc"
-        fi
-    fi
+    log "Setting VNC password (vncserver: ${vncserver_cmd:-<not found>})"
+    # Parent directories for TigerVNC >= 1.14 (~/.config/tigervnc, ~/.local/state/tigervnc)
+    install -d -o "${user}" -g "${group}" "${home_dir}/.config" "${home_dir}/.local" "${home_dir}/.local/state"
     install -d -m 700 -o "${user}" -g "${group}" "${vnc_dir}"
     printf '%s\n' "${VNC_PASSWORD}" | "${vncpasswd_cmd}" -f > "${vnc_dir}/passwd" || return 1
     chown "${user}:${group}" "${vnc_dir}/passwd"
@@ -149,7 +132,19 @@ start_vnc() {
     [[ -n "${vncserver_cmd}" ]] || { log "ERROR: vncserver not found in the image"; return 1; }
     rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
     log "Starting vncserver :1 (${VNC_GEOMETRY})"
-    if ! su - "${user}" -c "${vncserver_cmd} :1 -geometry ${VNC_GEOMETRY} -depth 24 -localhost no -SecurityTypes VncAuth"; then
+    local out rc
+    out="$(su - "${user}" -c "${vncserver_cmd} :1 -geometry ${VNC_GEOMETRY} -depth 24 -localhost no -SecurityTypes VncAuth" 2>&1)"
+    rc=$?
+    [[ -n "${out}" ]] && printf '%s\n' "${out}"
+    # Safety net: if TigerVNC still cannot migrate ~/.vnc to ~/.config/tigervnc,
+    # move our files there ourselves and try once more.
+    if (( rc != 0 )) && [[ "${out}" == *"Could not migrate"* && "${vnc_dir}" == "${home_dir}/.vnc" ]]; then
+        log "vncserver uses ~/.config/tigervnc: moving the VNC files there and retrying"
+        use_xdg_dir
+        start_vnc
+        return
+    fi
+    if (( rc != 0 )); then
         log "ERROR: vncserver failed to start"
         show_vnc_log
         return 1
