@@ -9,7 +9,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# RUN instructions use /bin/sh: podman builds OCI images, which ignore the SHELL instruction.
+# Keep RUN lines POSIX; anything that needs bash goes into a script run with `bash script.sh`.
 
 # Build args are declared right before the step that uses them, so that changing
 # one only invalidates the build cache from that step on.

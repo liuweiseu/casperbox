@@ -154,6 +154,9 @@ if [[ "${tool}" == casperbox ]]; then
         "$(ssh_run 'test -f toolflow/mlib_devel/startsg.local && echo yes || echo no')"
     check "device-tree-xlnx cloned" yes "$(ssh_run 'test -d toolflow/device-tree-xlnx && echo yes || echo no')"
     check "scilab on PATH" "/home/casper/.local/bin/scilab" "$(ssh_login 'command -v scilab')"
+    # versions/m2021a/pkgs.list (Vivado runtime dependencies) was installed
+    check "version packages (pkgs.list) installed" install \
+        "$(ssh_run "dpkg-query -W -f='\${Status}' libtinfo5 2>/dev/null | cut -d' ' -f1")"
     ssh_run 'touch work/from-container' || true
     check "~/work is writable and owned by the host user" "$(id -u)" "$(stat -c %u work/from-container 2>/dev/null || echo missing)"
 fi

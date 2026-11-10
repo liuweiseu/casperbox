@@ -35,7 +35,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LC_ALL=en_US.UTF-8 \
     CONDA_DIR=/opt/conda
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# RUN instructions use /bin/sh: podman builds OCI images, which ignore the SHELL instruction.
+# Keep RUN lines POSIX; anything that needs bash goes into a script run with `bash script.sh`.
 
 # 1. Base packages for every version: openssh-server / tigervnc / firefox / desktop / tools
 COPY common/packages/software.list /opt/casper/packages/
@@ -45,7 +46,7 @@ RUN bash /opt/casper/scripts/install_base.sh /opt/casper/packages/software.list
 # 1b. Packages this version needs in addition (versions/<version>/pkgs.list, optional),
 #     e.g. the Vivado runtime dependencies
 COPY versions/${TOOLFLOW_VERSION}/ /opt/casper/version/
-RUN if [[ -f /opt/casper/version/pkgs.list ]]; then \
+RUN if [ -f /opt/casper/version/pkgs.list ]; then \
         bash /opt/casper/scripts/install_pkg_list.sh /opt/casper/version/pkgs.list; \
     else \
         echo "No versions/${TOOLFLOW_VERSION}/pkgs.list"; \
