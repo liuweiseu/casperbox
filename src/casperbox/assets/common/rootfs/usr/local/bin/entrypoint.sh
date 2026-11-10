@@ -89,14 +89,27 @@ vncserver_cmd="$(find_cmd vncserver tigervncserver)" || vncserver_cmd=""
 # ~/.local/state/tigervnc, and tries to migrate an existing ~/.vnc on start (which fails if
 # ~/.config does not exist). Older versions use ~/.vnc for both.
 tigervnc_version() {
-    local x
-    x="$(find_cmd Xtigervnc Xvnc)" || return 1
-    "${x}" -version 2>&1 | sed -n 's/.*TigerVNC \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1
+    local x out
+    x="$(find_cmd Xtigervnc Xvnc)" || return 0
+    # X servers may exit with a non-zero status after -version: only parse the output
+    out="$("${x}" -version 2>&1)" || true
+    sed -n 's/.*TigerVNC \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' <<<"${out}" | head -n 1
 }
-vnc_version="$(tigervnc_version)" || vnc_version=""
-vnc_major="${vnc_version%%.*}"
-vnc_minor="${vnc_version#*.}"
-if [[ -n "${vnc_version}" ]] && (( vnc_major > 1 || (vnc_major == 1 && vnc_minor >= 14) )); then
+vnc_version="$(tigervnc_version)"
+
+uses_xdg_dirs() {
+    # 1. by version
+    if [[ "${vnc_version}" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+        local major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}"
+        (( major > 1 || (major == 1 && minor >= 14) )) && return 0
+    fi
+    # 2. by the vncserver program itself (it migrates ~/.vnc to ~/.config/tigervnc)
+    local f
+    f="$(readlink -f "${vncserver_cmd}" 2>/dev/null)" || return 1
+    [[ -n "${f}" ]] && grep -aqsE 'config/tigervnc|Could not migrate' "${f}"
+}
+
+if [[ -n "${vncserver_cmd}" ]] && uses_xdg_dirs; then
     vnc_dir="${home_dir}/.config/tigervnc"
     vnc_log_dirs=("${home_dir}/.local/state/tigervnc" "${vnc_dir}")
 else
