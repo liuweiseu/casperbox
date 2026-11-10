@@ -11,7 +11,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any
 
-from .config import DEV_TESTED_OS, RELEASE, Config, PortMap
+from .config import DEV_TESTED_OS, RELEASE, TOOL_NAMES, Config, PortMap
 from .errors import CasperError
 from .versions import assets_dir
 
@@ -258,12 +258,19 @@ def container_mounts(name: str) -> list[MountInfo]:
 
 def check_owner(cfg: Config, info: ContainerInfo) -> None:
     """Refuse to touch a container that was created from another config file."""
-    if info.config_path != str(cfg.path):
-        origin = info.config_path or "outside casperbox"
+    if info.config_path == str(cfg.path):
+        return
+    if not info.config_path:
         raise CasperError(
-            f"Container {cfg.name} was created by {origin}, not by {cfg.path}.\n"
-            f"Change container.name in {cfg.path.name} to create a separate container."
+            f"A container named {cfg.name} already exists and was not created by casperbox.\n"
+            f"Change container.name in {cfg.path.name}, or remove that container with: podman rm -f {cfg.name}"
         )
+    owner_tool = TOOL_NAMES.get(info.kind, "casperbox")
+    raise CasperError(
+        f"Container {cfg.name} was created by {info.config_path}, not by {cfg.path}.\n"
+        f"Change container.name in {cfg.path.name} to create a separate container "
+        f"(`{owner_tool} ps` lists containers and their config files)."
+    )
 
 
 def check_ports_free(cfg: Config, own: ContainerInfo | None) -> None:

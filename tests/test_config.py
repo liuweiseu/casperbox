@@ -238,3 +238,23 @@ def test_terminal_env(monkeypatch):
     monkeypatch.setenv("TERM", "dumb")
     monkeypatch.delenv("COLORTERM")
     assert terminal_env() == ["-e", "TERM=xterm-256color"]
+
+
+def test_check_owner_messages(env):
+    from casperbox.podman import ContainerInfo, check_owner
+
+    cfg = env()
+    same = ContainerInfo(cfg.name, "running", "Up", {"casperbox.config": str(cfg.path)}, [])
+    check_owner(cfg, same)  # same config: allowed (the container is recreated)
+
+    foreign = ContainerInfo(cfg.name, "running", "Up", {}, [])
+    with pytest.raises(CasperError, match="was not created by casperbox") as e:
+        check_owner(cfg, foreign)
+    assert f"podman rm -f {cfg.name}" in str(e.value)
+
+    other = ContainerInfo(
+        cfg.name, "running", "Up", {"casperbox.config": "/other/casper-dev.toml", "casperbox.kind": "dev"}, []
+    )
+    with pytest.raises(CasperError, match="created by /other/casper-dev.toml") as e:
+        check_owner(cfg, other)
+    assert "`casperbox-dev ps`" in str(e.value)
