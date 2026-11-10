@@ -58,6 +58,21 @@ def run(cmd: list[str], env: dict[str, str] | None = None) -> None:
         raise CasperError(f"{' '.join(cmd[:2])} failed (exit code {r.returncode})")
 
 
+def terminal_env() -> list[str]:
+    """`-e` options passing the host terminal type into `podman exec`.
+
+    podman sets TERM=xterm by default, and Ubuntu's ~/.bashrc only enables the colour
+    prompt for xterm-color / *-256color terminals, so pass the host's TERM instead.
+    """
+    term = os.environ.get("TERM", "")
+    if not term or term == "dumb":
+        term = "xterm-256color"
+    args = ["-e", f"TERM={term}"]
+    if os.environ.get("COLORTERM"):
+        args += ["-e", f"COLORTERM={os.environ['COLORTERM']}"]
+    return args
+
+
 def exec_(cmd: list[str]) -> None:
     """Replace the current process (for interactive commands)."""
     os.execvp(cmd[0], cmd)

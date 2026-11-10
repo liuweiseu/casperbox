@@ -302,7 +302,8 @@ def make_app(kind: str) -> typer.Typer:
             raise CasperError(f"Container {cfg.name} does not exist, please run: {tool} up")
         if own.state != "running":
             raise CasperError(f"Container {cfg.name} is {own.state}, please run: {tool} up")
-        podman.exec_(["podman", "exec", "-it", "-u", cfg.user, "-w", cfg.home, cfg.name, "bash", "-l"])
+        podman.exec_(["podman", "exec", "-it", *podman.terminal_env(), "-u", cfg.user, "-w", cfg.home,
+                      cfg.name, "bash", "-l"])
 
     @app.command()
     def status(ctx: typer.Context, config: Path | None = config_opt) -> None:

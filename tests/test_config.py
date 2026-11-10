@@ -227,3 +227,14 @@ def test_unreadable_mounts_warn(env, tmp_path):
         secret.chmod(0o600)
     assert any("paths.license_dir: no read permission on directory" in w for w in cfg.warnings)
     assert any("mounts[0].host: no read permission on file" in w for w in cfg.warnings)
+
+
+def test_terminal_env(monkeypatch):
+    from casperbox.podman import terminal_env
+
+    monkeypatch.setenv("TERM", "xterm-kitty")
+    monkeypatch.setenv("COLORTERM", "truecolor")
+    assert terminal_env() == ["-e", "TERM=xterm-kitty", "-e", "COLORTERM=truecolor"]
+    monkeypatch.setenv("TERM", "dumb")
+    monkeypatch.delenv("COLORTERM")
+    assert terminal_env() == ["-e", "TERM=xterm-256color"]

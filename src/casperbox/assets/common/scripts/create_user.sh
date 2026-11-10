@@ -35,10 +35,38 @@ if [[ "${CREATE_TOOLFLOW_DIRS:-1}" == 1 ]]; then
 fi
 chown -R "${USER_UID}:${USER_GID}" "${home_dir}"
 
+# ---- Shell configuration ----
+# ~/.bashrc normally comes from /etc/skel; write a minimal one if the base image has none
+if [[ ! -f "${home_dir}/.bashrc" ]]; then
+    cat > "${home_dir}/.bashrc" <<'EOF'
+# ~/.bashrc: executed by bash for interactive shells
+case $- in *i*) ;; *) return ;; esac
+HISTCONTROL=ignoreboth
+shopt -s histappend checkwinsize
+PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+alias ll='ls -alF'
+EOF
+fi
+# Coloured prompt whenever the terminal supports colours (not only for TERM=*-256color)
+sed -i 's/^#force_color_prompt=yes/force_color_prompt=yes/' "${home_dir}/.bashrc"
+
 # Non-login shells (e.g. terminals opened in VNC) also load the toolflow environment
 cat >> "${home_dir}/.bashrc" <<'EOF'
 
 # CASPER toolflow environment (Vivado / conda / mlib_devel)
 [ -r /etc/profile.d/casper.sh ] && . /etc/profile.d/casper.sh
 EOF
-chown "${USER_UID}:${USER_GID}" "${home_dir}/.bashrc"
+
+# Login shells (SSH, `casperbox shell`) read ~/.profile: make sure it loads ~/.bashrc
+if ! grep -qs '\.bashrc' "${home_dir}/.profile"; then
+    cat >> "${home_dir}/.profile" <<'EOF'
+
+# Load ~/.bashrc in login shells too
+if [ -n "$BASH_VERSION" ] && [ -f "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
+EOF
+fi
+chown "${USER_UID}:${USER_GID}" "${home_dir}/.bashrc" "${home_dir}/.profile"
