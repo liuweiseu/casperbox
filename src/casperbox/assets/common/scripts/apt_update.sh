@@ -7,11 +7,14 @@
 set -uo pipefail
 
 attempts="${APT_UPDATE_ATTEMPTS:-5}"
+# The output is shown live (tee) and kept in a temporary file to look for fetch failures
+log="$(mktemp)"
+trap 'rm -f "${log}"' EXIT
 for (( i = 1; i <= attempts; i++ )); do
-    out="$(apt-get update -o Acquire::Retries=3 2>&1)"
-    rc=$?
-    printf '%s\n' "${out}"
-    if (( rc == 0 )) && ! grep -qE '^(W|E): (Failed to fetch|Some index files failed)' <<<"${out}"; then
+    echo "apt-get update (attempt ${i}/${attempts})"
+    apt-get update -o Acquire::Retries=3 2>&1 | tee "${log}"
+    rc=${PIPESTATUS[0]}
+    if (( rc == 0 )) && ! grep -qE '^(W|E): (Failed to fetch|Some index files failed)' "${log}"; then
         exit 0
     fi
     if (( i < attempts )); then
