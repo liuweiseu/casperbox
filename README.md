@@ -277,8 +277,8 @@ common/rootfs/                  sshd config, profile, entrypoint
 toolflow/Dockerfile             Dockerfile shared by all toolflow versions
 versions/<version>/
     toolflow.toml               version definition (passed as build args)
-    pkgs.list                   optional: extra apt packages of this version (e.g. Vivado runtime deps)
-    patch.sh                    optional: version-specific fixes, run as root at the end of the build
+    pkgs.list                   extra apt packages of this version (e.g. Vivado runtime deps); may be empty
+    patch/*.sh                  optional: version-specific fixes, run as root at the end of the build
     Dockerfile                  optional: replaces toolflow/Dockerfile for this version
 dev/                            casperbox-dev: Dockerfile, base.list, install scripts
 ```
@@ -290,9 +290,14 @@ optional package (installed only if the OS release has it). Packages are install
 - Adding a package for every version: add it to `common/packages/software.list`.
 - Adding a package for one version: add it to `versions/<version>/pkgs.list`.
 - Fixing something for one version (e.g. m2021a preloads libudev for Vivado 2021.1 in `~/.bashrc`):
-  put the commands in `versions/<version>/patch.sh`.
+  add a script to `versions/<version>/patch/`. All `*.sh` there run with bash, as root, in file name
+  order (`10-xxx.sh` before `50-yyy.sh`), after everything else is set up; a failing script fails the
+  build. The package indexes are updated before, so a script may `apt-get install`. Only the last build
+  step reruns when a patch changes.
+- Vivado's `scripts/installLibs.sh`: add the packages it installs on Ubuntu to `pkgs.list` instead of
+  running it (it ignores apt errors).
 - Adding a toolflow version: create `versions/<new>/toolflow.toml` (copy m2021a's; `TOOLFLOW_VERSION`
-  must match the directory name) and, if needed, `pkgs.list`. A Dockerfile is only needed if the
+  must match the directory name) and `pkgs.list` (may be empty). A Dockerfile is only needed if the
   version's build steps differ.
 
 After any change, `casperbox up` rebuilds the image automatically.

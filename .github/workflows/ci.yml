@@ -32,7 +32,7 @@ jobs:
             src/casperbox/assets/common/scripts/*.sh \
             src/casperbox/assets/common/rootfs/usr/local/bin/entrypoint.sh \
             src/casperbox/assets/dev/*.sh \
-            src/casperbox/assets/versions/*/*.sh \
+            src/casperbox/assets/versions/*/patch/*.sh \
             tests/smoke/*.sh
 
   unit-tests:

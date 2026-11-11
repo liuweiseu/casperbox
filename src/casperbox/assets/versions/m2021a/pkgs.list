@@ -3,7 +3,6 @@
 # A trailing "?" marks an optional package: installed only if the OS release has it.
 
 # ---- Vivado 2021.1 runtime dependencies ----
-libtinfo5
 libncurses5
 libx11-6
 libxext6
@@ -26,4 +25,16 @@ libcanberra-gtk3-module
 libasound2
 libgl1
 libglu1-mesa
+
+# ---- Vivado 2021.1 scripts/installLibs.sh (Ubuntu part) ----
+# Listed here instead of running the script: it ignores apt errors (every apt-get is piped
+# into tee), so a missing package would not fail the build.
+libc6-dev-i386
+net-tools
 graphviz
+make
+unzip
+g++
+libtinfo5
+xvfb
+git

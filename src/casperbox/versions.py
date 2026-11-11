@@ -61,16 +61,15 @@ class Toolflow:
         return own if own.is_file() else assets_dir() / "toolflow" / "Dockerfile"
 
     @property
-    def pkgs_list(self) -> Path | None:
-        """Extra apt packages of this version (versions/<version>/pkgs.list), if any."""
-        p = self.version_dir / "pkgs.list"
-        return p if p.is_file() else None
+    def pkgs_list(self) -> Path:
+        """Extra apt packages of this version (versions/<version>/pkgs.list; required, may be empty)."""
+        return self.version_dir / "pkgs.list"
 
     @property
-    def patch_script(self) -> Path | None:
-        """Version-specific fixes run at the end of the build (versions/<version>/patch.sh), if any."""
-        p = self.version_dir / "patch.sh"
-        return p if p.is_file() else None
+    def patch_scripts(self) -> list[Path]:
+        """Version-specific fixes (versions/<version>/patch/*.sh), in the order the build runs them."""
+        d = self.version_dir / "patch"
+        return sorted((p for p in d.glob("*.sh") if p.is_file()), key=lambda p: p.name) if d.is_dir() else []
 
     @property
     def vivado_version(self) -> str:
@@ -100,4 +99,7 @@ def load_toolflow(version: str) -> Toolflow:
         raise CasperError(
             f"TOOLFLOW_VERSION={params['TOOLFLOW_VERSION']} in {path} does not match the directory name {version}"
         )
-    return Toolflow(version=version, params=params)
+    tf = Toolflow(version=version, params=params)
+    if not tf.pkgs_list.is_file():
+        raise CasperError(f"{tf.pkgs_list} is missing; create it (an empty file or only comments is fine)")
+    return tf

@@ -438,8 +438,8 @@ def make_app(kind: str) -> typer.Typer:
         if cfg.kind == RELEASE:
             rows.append(("toolflow", cfg.version))
             rows.append(("dockerfile", str(cfg.dockerfile)))
-            rows.append(("pkgs.list", str(cfg.toolflow.pkgs_list or "-")))
-            rows.append(("patch.sh", str(cfg.toolflow.patch_script or "-")))
+            rows.append(("pkgs.list", str(cfg.toolflow.pkgs_list)))
+            rows.append(("patches", " ".join(p.name for p in cfg.toolflow.patch_scripts) or "-"))
         else:
             rows += [("os", cfg.base_image), ("packages", " ".join(cfg.packages) or "-")]
         rows.append(("apt mirror", cfg.apt_mirror or "default"))

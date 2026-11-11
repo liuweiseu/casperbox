@@ -219,17 +219,27 @@ def test_version_dockerfile_and_pkgs_list(monkeypatch, tmp_path):
     assert tf.dockerfile == assets / "toolflow" / "Dockerfile"  # shared by default
     assert tf.pkgs_list == assets / "versions" / "m2021a" / "pkgs.list"
     assert "libtinfo5" in tf.pkgs_list.read_text()
-    assert tf.patch_script == assets / "versions" / "m2021a" / "patch.sh"
+    assert tf.patch_scripts == [assets / "versions" / "m2021a" / "patch" / "50-libudev.sh"]
+    assert "libc6-dev-i386" in tf.pkgs_list.read_text()  # from Vivado's installLibs.sh
 
-    # a new version only needs toolflow.toml; its own Dockerfile overrides the shared one
+    # a new version needs toolflow.toml and pkgs.list (may be empty); its own Dockerfile overrides the shared one
     new = assets / "versions" / "m2099a"
     new.mkdir()
     text = (assets / "versions" / "m2021a" / "toolflow.toml").read_text()
     (new / "toolflow.toml").write_text(text.replace('"m2021a"', '"m2099a"'))
     assert "m2099a" in versions.list_versions()
+    with pytest.raises(CasperError, match="pkgs.list is missing"):
+        versions.load_toolflow("m2099a")
+    (new / "pkgs.list").write_text("# nothing extra\n")
     tf = versions.load_toolflow("m2099a")
-    assert tf.dockerfile == assets / "toolflow" / "Dockerfile" and tf.pkgs_list is None
-    assert tf.patch_script is None
+    assert tf.dockerfile == assets / "toolflow" / "Dockerfile"
+    assert tf.patch_scripts == []
+
+    # patch/*.sh run in file name order; other files are ignored
+    (new / "patch").mkdir()
+    for name in ("50-b.sh", "10-a.sh", "README.md"):
+        (new / "patch" / name).write_text("true\n")
+    assert [p.name for p in tf.patch_scripts] == ["10-a.sh", "50-b.sh"]
     (new / "Dockerfile").write_text("FROM scratch\n")
     assert versions.load_toolflow("m2099a").dockerfile == new / "Dockerfile"
 

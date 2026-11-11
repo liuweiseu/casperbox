@@ -48,14 +48,11 @@ COPY common/packages/software.list /opt/casper/packages/
 COPY common/scripts/apt_update.sh common/scripts/install_pkg_list.sh common/scripts/install_base.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/install_base.sh /opt/casper/packages/software.list
 
-# 1b. Packages this version needs in addition (versions/<version>/pkgs.list, optional),
-#     e.g. the Vivado runtime dependencies
-COPY versions/${TOOLFLOW_VERSION}/ /opt/casper/version/
-RUN if [ -f /opt/casper/version/pkgs.list ]; then \
-        bash /opt/casper/scripts/install_pkg_list.sh /opt/casper/version/pkgs.list; \
-    else \
-        echo "No versions/${TOOLFLOW_VERSION}/pkgs.list"; \
-    fi
+# 1b. Packages this version needs in addition (versions/<version>/pkgs.list, may be empty),
+#     e.g. the Vivado runtime dependencies. Only this file is copied here: the rest of the version
+#     directory (patch/) is copied in step 7, so editing a patch does not rebuild everything.
+COPY versions/${TOOLFLOW_VERSION}/pkgs.list /opt/casper/version/pkgs.list
+RUN bash /opt/casper/scripts/install_pkg_list.sh /opt/casper/version/pkgs.list
 
 # 2. Create the user (UID/GID match the host, for userns keep-id)
 COPY common/scripts/create_user.sh /opt/casper/scripts/
@@ -95,13 +92,12 @@ RUN chmod 755 /usr/local/bin/entrypoint.sh /opt/casper/vnc/xstartup \
     } > /etc/casper/toolflow.env \
  && chmod 644 /etc/casper/toolflow.env
 
-# 7. Version-specific fixes (versions/<version>/patch.sh, optional), run as root last so that
-#    they can change anything set up above; the build args are available as environment variables
-RUN if [ -f /opt/casper/version/patch.sh ]; then \
-        bash /opt/casper/version/patch.sh; \
-    else \
-        echo "No versions/${TOOLFLOW_VERSION}/patch.sh"; \
-    fi
+# 7. Version-specific fixes (versions/<version>/patch/*.sh, optional), run as root in file name
+#    order, last so that they can change anything set up above; the build args are available as
+#    environment variables
+COPY common/scripts/run_patches.sh /opt/casper/scripts/
+COPY versions/${TOOLFLOW_VERSION}/ /opt/casper/version/
+RUN bash /opt/casper/scripts/run_patches.sh /opt/casper/version/patch
 
 EXPOSE 22 5901
 
