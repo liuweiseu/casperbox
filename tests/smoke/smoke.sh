@@ -130,8 +130,18 @@ check() {  # check DESCRIPTION EXPECTED ACTUAL
 
 check "SSH password login (port ${ssh_port})" casper "$(ssh_run whoami 2>&1 || true)"
 
-banner="$(timeout 10 bash -c "exec 3<>/dev/tcp/127.0.0.1/${vnc_port}; head -c 3 <&3" 2>/dev/null || true)"
-check "VNC server answers (port ${vnc_port})" RFB "${banner}"
+# The entrypoint starts sshd before vncserver, so VNC may still be starting when SSH answers
+vnc_banner() {  # RFB once the VNC server answers (waits up to ~30 s), else what it got
+    local banner=""
+    for _ in $(seq 15); do
+        banner="$(timeout 10 bash -c "exec 3<>/dev/tcp/127.0.0.1/${vnc_port}; head -c 3 <&3" 2>/dev/null || true)"
+        [[ "${banner}" == RFB ]] && break
+        sleep 2
+    done
+    echo "${banner}"
+}
+
+check "VNC server answers (port ${vnc_port})" RFB "$(vnc_banner)"
 
 # The XFCE desktop came up (a broken session leaves a black screen with VNC still answering)
 panel=no
@@ -205,13 +215,7 @@ for _ in $(seq 60); do
     sleep 2
 done
 check "File outside the mounts kept after restart" kept "$(ssh_run 'cat restart-marker' 2>&1 || true)"
-banner=""
-for _ in $(seq 15); do
-    banner="$(timeout 10 bash -c "exec 3<>/dev/tcp/127.0.0.1/${vnc_port}; head -c 3 <&3" 2>/dev/null || true)"
-    [[ "${banner}" == RFB ]] && break
-    sleep 2
-done
-check "VNC server answers after restart" RFB "${banner}"
+check "VNC server answers after restart" RFB "$(vnc_banner)"
 
 # ---------------------------------------------------------------------------
 step "Saving the container as an image with ${tool} commit"
