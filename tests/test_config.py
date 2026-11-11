@@ -181,13 +181,13 @@ def test_build_hash_tracks_build_inputs(env, monkeypatch, tmp_path):
     # work on a copy of the assets so the test can modify build files
     assets = tmp_path / "assets"
     shutil.copytree(versions.assets_dir(), assets)
-    for module in (versions, config, podman):
+    for module in (versions, config):
         monkeypatch.setattr(module, "assets_dir", lambda: assets)
 
     cfg = env()
     h1 = podman.build_hash(cfg)
     assert podman.build_hash(cfg) == h1  # deterministic
-    assert f"casperbox.build-hash={h1}" in podman.build_args(cfg)
+    assert f"casperbox.build-hash={h1}" in podman.build_args(cfg, Path("/ctx"))
 
     with (assets / "common" / "packages" / "software.list").open("a") as f:
         f.write("htop\n")
@@ -313,7 +313,7 @@ def test_apt_mirror(env, monkeypatch):
     assert env().apt_mirror == ""
     cfg = env(build__apt_mirror="http://us.archive.ubuntu.com/ubuntu/")
     assert cfg.apt_mirror == "http://us.archive.ubuntu.com/ubuntu"
-    assert "APT_MIRROR=http://us.archive.ubuntu.com/ubuntu" in podman.build_args(cfg)
+    assert "APT_MIRROR=http://us.archive.ubuntu.com/ubuntu" in podman.build_args(cfg, Path("/ctx"))
     assert podman.build_hash(cfg) != podman.build_hash(env())  # changing the mirror rebuilds
     for bad in ("ftp://mirror/ubuntu", "us.archive.ubuntu.com/ubuntu", "http://host/a b", "http://h/#x"):
         with pytest.raises(CasperError, match="build.apt_mirror"):

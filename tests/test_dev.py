@@ -104,11 +104,11 @@ def test_build_and_run_args(dev):
         mounts=[{"host": "../src", "container": "~/src"}],
         container={"name": "lab", "password": "s3cret-pw"},
     )
-    b = build_args(cfg)
+    b = build_args(cfg, Path("/ctx"))
     assert "BASE_IMAGE=docker.io/library/ubuntu:26.04" in b
     assert "PACKAGES=git vim" in b
     assert b[b.index("-t") + 1] == "casperbox-dev:lab"
-    assert b[b.index("-f") + 1].endswith("assets/dev/Dockerfile")
+    assert b[b.index("-f") + 1] == "/ctx/dev/Dockerfile" and b[-1] == "/ctx"
 
     r = run_args(cfg)
     volumes = [r[i + 1] for i, a in enumerate(r) if a == "-v"]
@@ -134,4 +134,4 @@ def test_dev_mounts_must_exist_and_be_readable(dev):
 def test_dev_apt_mirror(dev):
     assert dev().apt_mirror == ""
     cfg = dev(build={"apt_mirror": "https://mirrors.ocf.berkeley.edu/ubuntu"})
-    assert "APT_MIRROR=https://mirrors.ocf.berkeley.edu/ubuntu" in build_args(cfg)
+    assert "APT_MIRROR=https://mirrors.ocf.berkeley.edu/ubuntu" in build_args(cfg, Path("/ctx"))

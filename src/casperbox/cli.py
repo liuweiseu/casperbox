@@ -15,7 +15,7 @@ from typing import Annotated
 
 import typer
 
-from . import __version__, podman
+from . import __version__, plugins, podman
 from .config import (
     CONFIG_NAMES,
     DEV,
@@ -30,7 +30,13 @@ from .config import (
     render_template,
 )
 from .errors import CasperError
-from .versions import list_versions, load_toolflow
+from .versions import (
+    PLUGIN_PATH_ENV,
+    list_versions,
+    load_toolflow,
+    plugin_dirs,
+    user_plugin_dir,
+)
 
 # ---------------------------------------------------------------------------
 # Output helpers
@@ -145,7 +151,8 @@ def make_app(kind: str) -> typer.Typer:
             info(f"Checking base image {cfg.base_image}")
             podman.check_base_image(cfg)
         info(f"Building image {cfg.image} (the first build downloads a lot, please be patient)")
-        podman.run(podman.build_args(cfg, no_cache))
+        with podman.build_context(cfg) as context:
+            podman.run(podman.build_args(cfg, context, no_cache))
         info(f"Image built: {cfg.image}")
 
     # ---- kind-specific commands: list, init ----
@@ -154,12 +161,59 @@ def make_app(kind: str) -> typer.Typer:
 
         @app.command("list")
         def list_cmd() -> None:
-            """List supported toolflow versions."""
-            rows = [("TOOLFLOW", "VIVADO", "SCILAB", "PYTHON")]
+            """List toolflow versions: built-in ones and plugins."""
+            rows = [("TOOLFLOW", "VIVADO", "SCILAB", "PYTHON", "SOURCE")]
             for v in list_versions():
                 tf = load_toolflow(v)
-                rows.append((v, tf.vivado_version, tf.params["SCILAB_VERSION"], tf.params["PYTHON_VERSION"]))
+                rows.append((v, tf.vivado_version, tf.params["SCILAB_VERSION"], tf.params["PYTHON_VERSION"],
+                             tf.source))
             _print_table(rows)
+
+        plugin_app = typer.Typer(
+            help="Toolflow version plugins: your own versions, in the same layout as the built-in ones.",
+            no_args_is_help=True,
+        )
+        app.add_typer(plugin_app, name="plugin")
+
+        @plugin_app.command("new")
+        def plugin_new(
+            name: Annotated[str, typer.Argument(help="Name of the new toolflow version, e.g. m2025a")],
+            template: Annotated[str | None, typer.Option(
+                "--from", help="Version to copy (built-in or plugin; default: the newest built-in version)",
+                show_default=False)] = None,
+            directory: Annotated[Path | None, typer.Option(
+                "--dir", help="Directory to create the plugin in (default: ~/.config/casperbox/versions)",
+                show_default=False)] = None,
+            force: Annotated[bool, typer.Option("--force", "-f", help="Replace an existing plugin")] = False,
+        ) -> None:
+            """Create a plugin from a template (a copy of an existing version)."""
+            new = plugins.create_plugin(name, template, directory, force)
+            info(f"Created plugin {name} in {new.path} (copied from {new.template})")
+            if not new.searched:
+                warn(f"{new.path.parent} is not searched for plugins; add it to {PLUGIN_PATH_ENV}, e.g.\n"
+                     f"  export {PLUGIN_PATH_ENV}={shlex.quote(str(new.path.parent))}")
+            typer.echo(f"\nNext: edit the files in {new.path} (see README.md there), then run:")
+            typer.echo(f"  {tool} plugin check {name}")
+            typer.echo(f"  {tool} init --toolflow {name}")
+
+        @plugin_app.command("check")
+        def plugin_check(
+            name: Annotated[str, typer.Argument(help="Toolflow version to check (plugin or built-in)")],
+        ) -> None:
+            """Check a plugin's files without building it."""
+            _print_table([("", ""), *plugins.check_version(name)])
+            info(f"{name}: OK")
+
+        @plugin_app.command("path")
+        def plugin_path() -> None:
+            """Show the directories searched for plugins."""
+            env = os.environ.get(PLUGIN_PATH_ENV, "")
+            typer.echo(f"{PLUGIN_PATH_ENV}={env}" if env else f"{PLUGIN_PATH_ENV} is not set")
+            user_dir = user_plugin_dir().absolute()
+            for d in plugin_dirs():
+                note = "exists" if d.is_dir() else "does not exist"
+                origin = "user" if d == user_dir else PLUGIN_PATH_ENV
+                typer.echo(f"  {d}  ({origin}, {note})")
 
         @app.command()
         def init(
@@ -436,7 +490,7 @@ def make_app(kind: str) -> typer.Typer:
         cfg = load(ctx, config)
         rows = [("config", str(cfg.path))]
         if cfg.kind == RELEASE:
-            rows.append(("toolflow", cfg.version))
+            rows.append(("toolflow", f"{cfg.version} ({cfg.toolflow.source})"))
             rows.append(("dockerfile", str(cfg.dockerfile)))
             rows.append(("pkgs.list", str(cfg.toolflow.pkgs_list)))
             rows.append(("patches", " ".join(p.name for p in cfg.toolflow.patch_scripts) or "-"))
@@ -463,8 +517,9 @@ def make_app(kind: str) -> typer.Typer:
         typer.echo("\nenvironment:")
         for k, v in podman.container_env(cfg).items():
             typer.echo(f"  {k}={'******' if k in podman.SECRET_ENV else v}")
-        typer.echo("\nbuild:")
-        typer.echo("  " + shlex.join(podman.build_args(cfg)))
+        typer.echo("\nbuild (CONTEXT: temporary copy of " + ", ".join(
+            f"{name}/ <- {src}" for name, src in cfg.build_sources) + "):")
+        typer.echo("  " + shlex.join(podman.build_args(cfg, Path("CONTEXT"))))
         typer.echo("\nrun:")
         typer.echo("  " + shlex.join(podman.run_args(cfg)))
 

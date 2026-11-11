@@ -8,12 +8,15 @@ import os
 import shutil
 import socket
 import subprocess
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .config import DEV_TESTED_OS, RELEASE, TOOL_NAMES, Config, PortMap, cpuset_cores
 from .errors import CasperError
-from .versions import assets_dir
 
 # Labels put on containers created by casperbox
 LABEL_MANAGED = "casperbox.managed"
@@ -24,6 +27,7 @@ LABEL_OS = "casperbox.os"  # casperbox-dev containers
 # Label put on images: hash of the build inputs, used to detect outdated images
 LABEL_BUILD_HASH = "casperbox.build-hash"
 LABEL_SNAPSHOT_OF = "casperbox.snapshot-of"  # images made by `commit`: source container
+LABEL_SOURCE = "casperbox.toolflow-source"  # toolflow images: built-in or the plugin directory
 
 # Environment passed to the container. Values are put in podman's own environment
 # and referenced by name (-e NAME), so passwords never appear on a command line.
@@ -108,34 +112,54 @@ def _build_arg_values(cfg: Config) -> dict[str, str]:
     }
 
 
+def _source_files(cfg: Config) -> list[tuple[str, Path]]:
+    """(path in the build context, file) for every file the image is built from."""
+    out = []
+    for name, src in cfg.build_sources:
+        if not src.is_dir():
+            continue
+        for p in sorted(src.rglob("*")):
+            if p.is_file() and "__pycache__" not in p.parts:
+                out.append((f"{name}/{p.relative_to(src).as_posix()}", p))
+    return out
+
+
 def build_hash(cfg: Config) -> str:
-    """Hash of everything the image is built from: build args and all files in the build
-    directories (assets/common plus toolflow/ and versions/<version>/, or dev/)."""
+    """Hash of everything the image is built from: build args and all files of the build context
+    (assets/common plus toolflow/ and the version directory, or dev/)."""
     h = hashlib.sha256()
     for k, v in sorted(_build_arg_values(cfg).items()):
         h.update(f"arg {k}={v}\n".encode())
-    root = assets_dir()
-    files = sorted(
-        p for d in cfg.build_dirs if d.is_dir() for p in d.rglob("*")
-        if p.is_file() and "__pycache__" not in p.parts
-    )
-    for p in files:
-        h.update(f"file {p.relative_to(root).as_posix()}\n".encode())
+    for name, p in _source_files(cfg):
+        h.update(f"file {name}\n".encode())
         h.update(p.read_bytes())
         h.update(b"\n")
     return h.hexdigest()
 
 
-def build_args(cfg: Config, no_cache: bool = False) -> list[str]:
+@contextmanager
+def build_context(cfg: Config) -> Iterator[Path]:
+    """Temporary build context: assets/common, toolflow/ (or dev/) and versions/<version>/,
+    the latter from the package or from a plugin directory."""
+    with tempfile.TemporaryDirectory(prefix="casperbox-build-") as tmp:
+        root = Path(tmp)
+        for name, src in cfg.build_sources:
+            shutil.copytree(src, root / name, ignore=shutil.ignore_patterns("__pycache__"))
+        yield root
+
+
+def build_args(cfg: Config, context: Path, no_cache: bool = False) -> list[str]:
     cmd = [
-        "podman", "build", "-f", str(cfg.dockerfile), "-t", cfg.image,
+        "podman", "build", "-f", str(context / cfg.dockerfile_in_context), "-t", cfg.image,
         "--label", f"{LABEL_BUILD_HASH}={build_hash(cfg)}",
     ]
+    if cfg.toolflow:
+        cmd += ["--label", f"{LABEL_SOURCE}={cfg.toolflow.source}"]
     if no_cache:
         cmd.append("--no-cache")
     for k, v in _build_arg_values(cfg).items():
         cmd += ["--build-arg", f"{k}={v}"]
-    cmd.append(str(assets_dir()))
+    cmd.append(str(context))
     return cmd
 
 

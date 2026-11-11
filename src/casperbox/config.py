@@ -113,12 +113,30 @@ class Config:
         return assets_dir() / "dev" / "Dockerfile"
 
     @property
-    def build_dirs(self) -> list[Path]:
-        """Directories whose files the image is built from (used to detect outdated images)."""
+    def build_sources(self) -> list[tuple[str, Path]]:
+        """What the build context is made of: (path in the context, source directory).
+
+        The image is built from these files (they also decide whether the image is outdated).
+        A toolflow version can be a plugin outside the package, so the context is put together
+        in a temporary directory for each build.
+        """
         root = assets_dir()
         if self.toolflow:
-            return [root / "common", root / "toolflow", self.toolflow.version_dir]
-        return [root / "common", root / "dev"]
+            return [
+                ("common", root / "common"),
+                ("toolflow", root / "toolflow"),
+                (f"versions/{self.toolflow.version}", self.toolflow.version_dir),
+            ]
+        return [("common", root / "common"), ("dev", root / "dev")]
+
+    @property
+    def dockerfile_in_context(self) -> str:
+        """Path of the Dockerfile inside the build context."""
+        if self.toolflow:
+            if self.toolflow.own_dockerfile:
+                return f"versions/{self.toolflow.version}/Dockerfile"
+            return "toolflow/Dockerfile"
+        return "dev/Dockerfile"
 
     @property
     def home(self) -> str:

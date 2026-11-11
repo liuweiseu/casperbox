@@ -131,7 +131,7 @@ Without limits (the default) none of this is needed. `status` shows the limits o
 
 | Command | Description |
 |---|---|
-| `casperbox list` | List supported toolflow versions |
+| `casperbox list` | List toolflow versions (built-in and plugins) |
 | `casperbox init [FILE] [--toolflow VER] [--force]` | Create a config file (default `casperbox.toml`) |
 | `casperbox build [--no-cache]` | Build the image |
 | `casperbox up [--yes]` | Start (recreate) the container; builds the image if missing or outdated |
@@ -143,6 +143,9 @@ Without limits (the default) none of this is needed. `status` shows the limits o
 | `casperbox logs [-f]` | Container logs |
 | `casperbox config` | Resolved config and podman commands (passwords masked) |
 | `casperbox ps` | List all casperbox containers |
+| `casperbox plugin new NAME [--from VER] [--dir DIR]` | Create a toolflow version plugin from a template |
+| `casperbox plugin check NAME` | Check a plugin's files without building |
+| `casperbox plugin path` | Show the directories searched for plugins |
 
 `-c FILE` selects the config file (before or after the command); the default is `./casperbox.toml`.
 
@@ -158,6 +161,27 @@ The image contains everything changed in the container (packages installed with 
 `~/toolflow`, ...), but not the mounted directories (`~/work`, `~/.Xilinx`, `[[mounts]]`).
 It also contains the container's passwords and SSH host keys, so only share it with people who may
 know them. `casperbox-dev commit` works the same way.
+
+## Plugins: your own toolflow versions
+
+A plugin is a toolflow version you define yourself, in the same layout as a built-in one
+(see [Build files](#build-files-srccasperboxassets)). It shows up in `casperbox list` and is used like a
+built-in version:
+
+```bash
+casperbox plugin new m2025a            # copy of the newest built-in version, in ~/.config/casperbox/versions/m2025a
+vi ~/.config/casperbox/versions/m2025a/toolflow.toml   # Vivado version, base image, branches, ...
+casperbox plugin check m2025a          # validate without building
+casperbox init --toolflow m2025a       # then casperbox up as usual
+```
+
+- `--from VER` copies another version (built-in or plugin); the generated `README.md` explains the files.
+- Plugins are searched in the directories of `CASPERBOX_PLUGIN_PATH` (separated by `:`, e.g. a
+  directory shared by all users of a server) and in `~/.config/casperbox/versions`.
+  `casperbox plugin new --dir DIR` creates one elsewhere.
+- A plugin may not have the name of a built-in version or of a plugin in another directory.
+- Changing a plugin's files makes `up` rebuild the image. Its patch scripts end up in the image, so keep
+  shared plugin directories writable only by their maintainers.
 
 ## Inside the container
 
@@ -235,8 +259,9 @@ src/casperbox/
 ├── cli.py             Typer commands
 ├── config.py          casperbox.toml parsing and validation
 ├── podman.py          podman build/run arguments and container queries
-├── versions.py        toolflow versions in assets/versions
-├── templates/         casperbox.toml and casper-dev.toml templates
+├── versions.py        toolflow versions: built-in (assets/versions) and plugins
+├── plugins.py         `plugin new` / `plugin check`
+├── templates/         casperbox.toml, casper-dev.toml and plugin README templates
 └── assets/            build context (see below)
 tests/                 pytest tests; smoke/ container smoke test
 ```
@@ -301,5 +326,8 @@ optional package (installed only if the OS release has it). Packages are install
   version's build steps differ.
 
 After any change, `casperbox up` rebuilds the image automatically.
+
+For each build, the context is put together in a temporary directory: `common/`, `toolflow/` (or `dev/`)
+and `versions/<version>/`, which comes from the package or from a plugin directory.
 
 The shell-based tool (`casper.sh`) is available at tag `v0.1.0`.
