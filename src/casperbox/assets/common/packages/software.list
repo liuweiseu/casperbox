@@ -39,6 +39,8 @@ tigervnc-standalone-server
 tigervnc-common
 # xauth: used by vncserver; not pulled in with --no-install-recommends
 xauth
+# vncpasswd: separate package since TigerVNC 1.11 (Ubuntu 22.04+); in tigervnc-common on Ubuntu 20.04
+tigervnc-tools?
 xfce4
 xfce4-terminal
 dbus-x11
