@@ -17,6 +17,8 @@ import typer
 
 from . import __version__, plugins, podman
 from .config import (
+    AUTO_PORT,
+    AUTO_PORT_START,
     CONFIG_NAMES,
     DEV,
     DEV_DEFAULT_OS,
@@ -28,6 +30,7 @@ from .config import (
     normalize_image,
     render_dev_template,
     render_template,
+    save_ports,
 )
 from .errors import CasperError
 from .versions import (
@@ -319,10 +322,17 @@ def make_app(kind: str) -> typer.Typer:
         own = podman.get_container(cfg.name)
         if own:
             podman.check_owner(cfg, own)
+        auto_ports = podman.pick_auto_ports(cfg, own)  # ports.ssh / ports.vnc = 0
+        for key, port in auto_ports.items():
+            setattr(cfg, f"{key}_port", port)
         podman.check_ports_free(cfg, own)
         podman.check_limits(cfg)
         if own:
             confirm_recreate(cfg, own, yes)  # before a possibly long image build
+        if auto_ports:
+            save_ports(cfg.path, auto_ports)
+            info("Picked free host port(s) " + ", ".join(f"{k} {p}" for k, p in auto_ports.items())
+                 + f"; saved in {cfg.path.name}")
 
         state = podman.image_state(cfg)
         if state == "missing":
@@ -508,6 +518,9 @@ def make_app(kind: str) -> typer.Typer:
                 ("license", str(cfg.license_dir)),
                 ("work", str(cfg.work_dir)),
             ]
+        rows.append(("ports", ", ".join(
+            f"{key} " + (f"auto (first free from {AUTO_PORT_START[key]}, picked by up)" if port == AUTO_PORT else str(port))
+            for key, port in (("ssh", cfg.ssh_port), ("vnc", cfg.vnc_port)))))
         rows.append(("limits", " ".join(podman.limit_args(cfg)) or "none"))
         rows.append(("network", podman.pasta_network(cfg)))
         width = max(len(k) for k, _ in rows)

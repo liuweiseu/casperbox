@@ -32,8 +32,9 @@ work_dir = "./work"        # -> ~/work in the container (created if missing)
 
 [ports]
 bind_address = "0.0.0.0"   # 127.0.0.1 = local access only
-ssh = 2222                 # -> container 22
-vnc = 5901                 # -> container 5901
+ssh = 2222                 # -> container 22; 0 = `up` picks the first free port from 2222
+vnc = 5901                 # -> container 5901; 0 = `up` picks the first free port from 5901
+                           # (a picked port is written back here)
 
 [vnc]
 geometry = "1920x1080"

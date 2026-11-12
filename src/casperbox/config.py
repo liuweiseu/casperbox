@@ -29,6 +29,9 @@ TOOL_NAMES = {RELEASE: "casperbox", DEV: "casperbox-dev"}
 
 # Default host ports; dev uses other ports so both can run side by side
 DEFAULT_PORTS = {RELEASE: (2222, 5901), DEV: (2322, 5902)}
+# ports.ssh / ports.vnc = 0: `up` picks the first free host port from here and saves it in the config
+AUTO_PORT = 0
+AUTO_PORT_START = {"ssh": 2222, "vnc": 5901}
 
 # Base images casperbox-dev has been tested with; others work with a warning
 DEV_TESTED_OS = ("ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04")
@@ -184,6 +187,30 @@ def os_slug(image: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_.-]", "-", f"{name.rsplit('/', 1)[-1]}-{tag}")
 
 
+def save_ports(path: Path, ports: dict[str, int]) -> None:
+    """Write ports picked for `ssh = 0` / `vnc = 0` back into [ports] of the config file.
+
+    Only the value of those lines is replaced; comments and the rest of the file are kept.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    section = ""
+    todo = dict(ports)
+    for i, line in enumerate(lines):
+        m = re.match(r"^\s*\[\s*([^\]]+?)\s*\]", line)
+        if m:
+            section = m.group(1)
+            continue
+        if section != "ports":
+            continue
+        for key in list(todo):
+            m = re.match(rf"^(\s*{key}\s*=\s*)0(?![0-9])(.*)$", line, re.DOTALL)
+            if m:
+                lines[i] = f"{m.group(1)}{todo.pop(key)}{m.group(2)}"
+    if todo:
+        raise CasperError(f"Could not find {', '.join(f'ports.{k} = 0' for k in todo)} in {path}")
+    path.write_text("".join(lines), encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Templates
 # ---------------------------------------------------------------------------
@@ -292,9 +319,11 @@ def _check_readable(path: Path, what: str, warnings: list[str]) -> None:
         warnings.append(f"{what}: no read permission on {kind} {path}; it will not be readable in the container")
 
 
-def _check_port(value: int, what: str) -> int:
+def _check_port(value: int, what: str, auto: bool = False) -> int:
+    if auto and value == AUTO_PORT:
+        return value
     if not 1 <= value <= 65535:
-        raise CasperError(f"{what} is out of range (1-65535): {value}")
+        raise CasperError(f"{what} is out of range ({'0 or ' if auto else ''}1-65535): {value}")
     return value
 
 
@@ -417,8 +446,8 @@ def _parse_network(top: _Table, default_ports: tuple[int, int]) -> dict[str, Any
         ipaddress.ip_address(bind_address)
     except ValueError as e:
         raise CasperError(f"Invalid ports.bind_address: {bind_address!r}") from e
-    ssh_port = _check_port(pt.get("ssh", int, default_ports[0]), "ports.ssh")
-    vnc_port = _check_port(pt.get("vnc", int, default_ports[1]), "ports.vnc")
+    ssh_port = _check_port(pt.get("ssh", int, default_ports[0]), "ports.ssh", auto=True)
+    vnc_port = _check_port(pt.get("vnc", int, default_ports[1]), "ports.vnc", auto=True)
     pt.finish()
 
     vn = top.table("vnc")
@@ -441,6 +470,8 @@ def _parse_network(top: _Table, default_ports: tuple[int, int]) -> dict[str, Any
 
     seen: set[tuple[int, str]] = set()
     for pm in [PortMap(ssh_port, 22, "tcp"), PortMap(vnc_port, 5901, "tcp"), *extra_ports]:
+        if pm.host == AUTO_PORT:
+            continue
         if (pm.host, pm.protocol) in seen:
             raise CasperError(f"Duplicate host port {pm.host}/{pm.protocol}")
         seen.add((pm.host, pm.protocol))

@@ -15,7 +15,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .config import DEV_TESTED_OS, RELEASE, TOOL_NAMES, Config, PortMap, cpuset_cores
+from .config import (
+    AUTO_PORT,
+    AUTO_PORT_START,
+    DEV_TESTED_OS,
+    RELEASE,
+    SSH_CONTAINER_PORT,
+    TOOL_NAMES,
+    VNC_CONTAINER_PORT,
+    Config,
+    PortMap,
+    cpuset_cores,
+)
 from .errors import CasperError
 
 # Labels put on containers created by casperbox
@@ -403,6 +414,34 @@ def check_ports_free(cfg: Config, own: ContainerInfo | None) -> None:
             f"{len(problems)} host port(s) unavailable:\n  " + "\n  ".join(problems)
             + f"\nChange them in {cfg.path.name}, or see `{cfg.tool} ps`."
         )
+
+
+def pick_auto_ports(cfg: Config, own: ContainerInfo | None) -> dict[str, int]:
+    """Host ports for ports.ssh / ports.vnc set to 0: the first free one from AUTO_PORT_START.
+
+    The existing container of this config keeps its port. Ports mapped by other casperbox
+    containers count as used even when those are stopped (they need them again at start).
+    """
+    if AUTO_PORT not in (cfg.ssh_port, cfg.vnc_port):
+        return {}
+    held_by_own = {p.container: p.host for p in own.ports if p.protocol == "tcp"} if own else {}
+    used = {p.host for c in list_containers() if own is None or c.name != own.name
+            for p in c.ports if p.protocol == "tcp"}
+    used |= {p.host for p in cfg.extra_ports if p.protocol == "tcp"}
+    used |= {p for p in (cfg.ssh_port, cfg.vnc_port) if p != AUTO_PORT}
+    picked: dict[str, int] = {}
+    for key, cport in (("ssh", SSH_CONTAINER_PORT), ("vnc", VNC_CONTAINER_PORT)):
+        if getattr(cfg, f"{key}_port") != AUTO_PORT:
+            continue
+        port = held_by_own.get(cport)
+        if port is None or port in used:
+            port = next((p for p in range(AUTO_PORT_START[key], 65536)
+                         if p not in used and _port_free(cfg.bind_address, p, "tcp")), None)
+        if port is None:
+            raise CasperError(f"No free host port found for ports.{key} from {AUTO_PORT_START[key]}")
+        picked[key] = port
+        used.add(port)
+    return picked
 
 
 def _port_free(addr: str, port: int, proto: str) -> bool:

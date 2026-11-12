@@ -44,8 +44,9 @@ cpuset = ""                # CPU cores, e.g. "0-15"; better than cpus for Vivado
 
 [ports]
 bind_address = "0.0.0.0"   # 127.0.0.1 = local access only
-ssh = 2322                 # -> container 22
-vnc = 5902                 # -> container 5901
+ssh = 2322                 # -> container 22; 0 = `up` picks the first free port from 2222
+vnc = 5902                 # -> container 5901; 0 = `up` picks the first free port from 5901
+                           # (a picked port is written back here)
 
 [vnc]
 geometry = "1920x1080"

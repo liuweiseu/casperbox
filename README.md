@@ -73,7 +73,7 @@ Relative paths in it are relative to the file's directory.
 | `paths.license_dir` | `~/.Xilinx` | Mounted at `~/.Xilinx` |
 | `paths.work_dir` | `./work` | Mounted at `~/work` (created if missing) |
 | `ports.bind_address` | `0.0.0.0` | |
-| `ports.ssh` / `ports.vnc` | `2222` / `5901` | Host ports for container 22 / 5901 |
+| `ports.ssh` / `ports.vnc` | `2222` / `5901` | Host ports for container 22 / 5901. `0`: `up` picks the first free port from 2222 / 5901 (skipping ports of other casperbox containers, even stopped ones) and writes it back into the config file |
 | `vnc.geometry` | `1920x1080` | |
 | `build.apt_mirror` | default servers | Ubuntu apt mirror for the image build, e.g. `http://us.archive.ubuntu.com/ubuntu` |
 | `[[mounts]]` | | Extra mounts: `host`, `container` (`~/` = home), `mode` |
@@ -95,7 +95,7 @@ Each config file is one container. Use another directory or file, and give it it
 `container.name` and ports:
 
 ```bash
-casperbox init lab.toml           # edit container.name, ports.ssh, ports.vnc
+casperbox init lab.toml           # edit container.name; ports.ssh / ports.vnc (0 = pick free ports)
 casperbox -c lab.toml up
 casperbox ps                      # all casperbox containers, from any directory
 ```
