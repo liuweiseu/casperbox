@@ -21,7 +21,11 @@ packages=()
 for entry in "${entries[@]}"; do
     if [[ "${entry}" == *"?" ]]; then
         pkg="${entry%"?"}"
-        if apt-cache show "${pkg}" >/dev/null 2>&1; then
+        # Check for an installable version: `apt-cache show` also succeeds for a purely
+        # virtual package (e.g. libasound2 on Ubuntu 24.04+, provided by libasound2t64),
+        # which `apt-get install` then rejects. Such packages report "Candidate: (none)".
+        candidate="$(apt-cache policy "${pkg}" 2>/dev/null | awk '/Candidate:/ {print $2}')"
+        if [[ -n "${candidate}" && "${candidate}" != "(none)" ]]; then
             packages+=("${pkg}")
         else
             echo "Optional package ${pkg} is not available on this OS release, skipping"
