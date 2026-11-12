@@ -154,6 +154,9 @@ check "XFCE desktop running (xfce4-panel)" yes "${panel}"
 # Look at the executables: `pgrep -f` would also match the shell running this command
 check "Desktop session bus is the system dbus" no \
     "$(ssh_run 'for p in $(pgrep -x dbus-daemon); do readlink "/proc/$p/exe"; done | grep -q /opt/conda && echo yes || echo no')"
+# xfconf answers on the desktop's session bus: take its address from the panel's environment
+check "Desktop wallpaper is the casperbox default" /usr/share/backgrounds/casperbox/casper-wallpaper.png \
+    "$(ssh_run 'export $(tr "\0" "\n" < /proc/$(pgrep -x xfce4-panel | head -1)/environ | grep ^DBUS_SESSION_BUS_ADDRESS=); xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitorVNC-0/workspace0/last-image' 2>&1 || true)"
 
 check "MAC address of eth0" "${mac}" "$(ssh_run cat /sys/class/net/eth0/address 2>&1 || true)"
 check "Host UID/GID inside the container (keep-id)" "$(id -u):$(id -g)" "$(ssh_run 'echo $(id -u):$(id -g)' 2>&1 || true)"

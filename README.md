@@ -298,7 +298,7 @@ tests/smoke/smoke.sh casperbox
 ```
 common/packages/software.list   base apt packages, installed for every toolflow version
 common/scripts/                 build scripts (install_pkg_list.sh installs a package list)
-common/rootfs/                  sshd config, profile, entrypoint
+common/rootfs/                  sshd config, profile, entrypoint, default XFCE wallpaper
 toolflow/Dockerfile             Dockerfile shared by all toolflow versions
 versions/<version>/
     toolflow.toml               version definition (passed as build args)
