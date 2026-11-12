@@ -279,8 +279,10 @@ def test_cli_plugin_new_list_check(user_dir):
     r = invoke("list")
     assert r.exit_code == 0, r.output
     lines = r.output.splitlines()
-    assert lines[0].split() == ["TOOLFLOW", "VIVADO", "SCILAB", "PYTHON", "SOURCE"]
-    assert lines[1].split()[0] == BUILTIN and lines[1].split()[-1] == "built-in"
+    assert lines[0].split() == ["TOOLFLOW", "OS", "VIVADO", "SCILAB", "PYTHON", "SOURCE"]
+    builtin = versions.load_toolflow(BUILTIN)
+    assert lines[1].split()[:2] == [BUILTIN, builtin.os] and lines[1].split()[-1] == "built-in"
+    assert builtin.os == builtin.params["BASE_IMAGE"].rsplit("/", 1)[-1]
     assert lines[2].split()[0] == "m2025a"
 
     r = invoke("plugin", "check", "m2025a")

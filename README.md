@@ -131,7 +131,7 @@ Without limits (the default) none of this is needed. `status` shows the limits o
 
 | Command | Description |
 |---|---|
-| `casperbox list` | List toolflow versions (built-in and plugins) |
+| `casperbox list` | List toolflow versions (built-in and plugins) with their base OS, Vivado, Scilab and Python versions |
 | `casperbox init [FILE] [--toolflow VER] [--force]` | Create a config file (default `casperbox.toml`) |
 | `casperbox build [--no-cache]` | Build the image |
 | `casperbox up [--yes]` | Start (recreate) the container; builds the image if missing or outdated |

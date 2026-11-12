@@ -162,10 +162,10 @@ def make_app(kind: str) -> typer.Typer:
         @app.command("list")
         def list_cmd() -> None:
             """List toolflow versions: built-in ones and plugins."""
-            rows = [("TOOLFLOW", "VIVADO", "SCILAB", "PYTHON", "SOURCE")]
+            rows = [("TOOLFLOW", "OS", "VIVADO", "SCILAB", "PYTHON", "SOURCE")]
             for v in list_versions():
                 tf = load_toolflow(v)
-                rows.append((v, tf.vivado_version, tf.params["SCILAB_VERSION"], tf.params["PYTHON_VERSION"],
+                rows.append((v, tf.os, tf.vivado_version, tf.params["SCILAB_VERSION"], tf.params["PYTHON_VERSION"],
                              tf.source))
             _print_table(rows)
 

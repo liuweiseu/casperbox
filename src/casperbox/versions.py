@@ -146,6 +146,11 @@ class Toolflow:
         return self.params["VIVADO_VERSION"]
 
     @property
+    def os(self) -> str:
+        """Base OS of the image: docker.io/library/ubuntu:20.04 -> ubuntu:20.04."""
+        return self.params["BASE_IMAGE"].rsplit("/", 1)[-1]
+
+    @property
     def image(self) -> str:
         return f"casper-toolflow:{self.version}"
 
