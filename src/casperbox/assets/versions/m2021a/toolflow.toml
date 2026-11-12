@@ -8,7 +8,7 @@ TOOLFLOW_VERSION = "m2021a"
 # Base image (fully qualified name to avoid podman short-name prompts)
 BASE_IMAGE = "docker.io/library/ubuntu:20.04"
 
-# Vivado version: vivado.dir must contain Vivado/<VIVADO_VERSION>/settings64.sh
+# Vivado version: vivado.dir must contain Vivado/<VIVADO_VERSION>/settings64.sh (or <VIVADO_VERSION>/Vivado/ from 2025.1)
 VIVADO_VERSION = "2021.1"
 
 # Python / conda

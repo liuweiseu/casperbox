@@ -69,7 +69,7 @@ Relative paths in it are relative to the file's directory.
 | `container.mac` | random | MAC of `eth0` |
 | `container.shm_size` / `tz` | `2g` / `UTC` | |
 | `container.memory` / `cpus` / `cpuset` | no limit | Resource limits, e.g. `"64g"` / `16` / `"0-15"` (see [Shared servers](#shared-servers)) |
-| `vivado.dir` / `vivado.mount` | / `ro` | Vivado install, mounted at the same path |
+| `vivado.dir` / `vivado.mount` | / `ro` | Vivado install, mounted at the same path: the Xilinx root (`Vivado/<version>/settings64.sh` up to 2024.x, `<version>/Vivado/settings64.sh` from 2025.1) or the Vivado directory itself |
 | `paths.license_dir` | `~/.Xilinx` | Mounted at `~/.Xilinx` |
 | `paths.work_dir` | `./work` | Mounted at `~/work` (created if missing) |
 | `ports.bind_address` | `0.0.0.0` | |

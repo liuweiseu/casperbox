@@ -107,6 +107,17 @@ def test_vivado_missing_settings_warns(env, tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
     assert env(vivado={"dir": str(empty)}).warnings
+    (msg,) = env(vivado={"dir": str(empty)}).warnings
+    assert "Vivado/2021.1/settings64.sh, 2021.1/Vivado/settings64.sh, settings64.sh" in msg
+
+
+@pytest.mark.parametrize("sub", ["Vivado/2021.1", "2021.1/Vivado", "."])
+def test_vivado_layouts(env, tmp_path, sub):
+    """<root>/Vivado/<v> (up to 2024.x), <root>/<v>/Vivado (from 2025.1) or the Vivado dir itself."""
+    root = tmp_path / "tools"
+    (root / sub).mkdir(parents=True, exist_ok=True)
+    (root / sub / "settings64.sh").touch()
+    assert env(vivado={"dir": str(root)}).warnings == []
 
 
 def test_mounts(env):

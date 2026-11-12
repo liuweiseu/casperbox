@@ -22,7 +22,8 @@ cpuset = ""                # CPU cores, e.g. "0-15"; better than cpus for Vivado
 
 [vivado]
 # Vivado install directory, mounted at the same path in the container.
-# Either the Xilinx root (with Vivado/$vivado_version/settings64.sh) or the Vivado dir itself.
+# Either the Xilinx root, with Vivado/$vivado_version/settings64.sh (up to 2024.x) or
+# $vivado_version/Vivado/settings64.sh (from 2025.1), or the Vivado dir itself.
 dir = "/tools/Xilinx"
 mount = "ro"               # ro | rw
 

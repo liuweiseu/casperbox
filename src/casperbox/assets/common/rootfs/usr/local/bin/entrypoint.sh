@@ -35,14 +35,20 @@ printf '%s:%s\n' "${user}" "${CONTAINER_PWD}" | chpasswd || die "chpasswd failed
 unset CONTAINER_PWD
 
 # ---- Vivado paths (mounted at the same path as on the host; casperbox images only) ----
-# Two layouts are supported: <VIVADO_DIR>/Vivado/<version>/settings64.sh or <VIVADO_DIR>/settings64.sh
+# Layouts, tried in this order (keep in sync with vivado_layouts() in config.py):
+#   <VIVADO_DIR>/Vivado/<version>/settings64.sh   up to 2024.x
+#   <VIVADO_DIR>/<version>/Vivado/settings64.sh   from 2025.1
+#   <VIVADO_DIR>/settings64.sh                    VIVADO_DIR is the Vivado directory itself
 if [[ -n "${VIVADO_DIR:-}" ]]; then
     xilinx_path=""
     composer_path=""
-    if [[ -r "${VIVADO_DIR}/Vivado/${VIVADO_VERSION:-}/settings64.sh" ]]; then
-        xilinx_path="${VIVADO_DIR}/Vivado/${VIVADO_VERSION}"
-        [[ -d "${VIVADO_DIR}/Model_Composer/${VIVADO_VERSION}" ]] \
-            && composer_path="${VIVADO_DIR}/Model_Composer/${VIVADO_VERSION}"
+    vv="${VIVADO_VERSION:-}"
+    if [[ -n "${vv}" && -r "${VIVADO_DIR}/Vivado/${vv}/settings64.sh" ]]; then
+        xilinx_path="${VIVADO_DIR}/Vivado/${vv}"
+        [[ -d "${VIVADO_DIR}/Model_Composer/${vv}" ]] && composer_path="${VIVADO_DIR}/Model_Composer/${vv}"
+    elif [[ -n "${vv}" && -r "${VIVADO_DIR}/${vv}/Vivado/settings64.sh" ]]; then
+        xilinx_path="${VIVADO_DIR}/${vv}/Vivado"
+        [[ -d "${VIVADO_DIR}/${vv}/Model_Composer" ]] && composer_path="${VIVADO_DIR}/${vv}/Model_Composer"
     elif [[ -r "${VIVADO_DIR}/settings64.sh" ]]; then
         xilinx_path="${VIVADO_DIR}"
     else

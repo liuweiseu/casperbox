@@ -319,6 +319,18 @@ def _check_readable(path: Path, what: str, warnings: list[str]) -> None:
         warnings.append(f"{what}: no read permission on {kind} {path}; it will not be readable in the container")
 
 
+def vivado_layouts(version: str) -> list[str]:
+    """Directories under vivado.dir that may hold settings64.sh, in the order the entrypoint tries them.
+
+    Keep in sync with common/rootfs/usr/local/bin/entrypoint.sh.
+    """
+    return [
+        f"Vivado/{version}",  # up to 2024.x: <Xilinx>/Vivado/<version>
+        f"{version}/Vivado",  # from 2025.1: <Xilinx>/<version>/Vivado
+        ".",                  # vivado.dir is the Vivado directory itself
+    ]
+
+
 def _check_port(value: int, what: str, auto: bool = False) -> int:
     if auto and value == AUTO_PORT:
         return value
@@ -544,10 +556,11 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
     _require_dir(vivado_dir, "vivado.dir")
     _check_readable(vivado_dir, "vivado.dir", warnings)
     vv = toolflow.vivado_version
-    if not (vivado_dir / "Vivado" / vv / "settings64.sh").is_file() and not (vivado_dir / "settings64.sh").is_file():
+    layouts = vivado_layouts(vv)
+    if not any((vivado_dir / sub / "settings64.sh").is_file() for sub in layouts):
         warnings.append(
-            f"Neither Vivado/{vv}/settings64.sh nor settings64.sh found under {vivado_dir}; "
-            f"toolflow {toolflow.version} requires Vivado {vv}"
+            f"None of {', '.join(str(PurePosixPath(sub, 'settings64.sh')) for sub in layouts)} found under "
+            f"{vivado_dir}; toolflow {toolflow.version} requires Vivado {vv}"
         )
     # Vivado is mounted at the same path; it must not shadow system or toolflow directories
     for protected in _protected_paths(user):
