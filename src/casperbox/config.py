@@ -56,6 +56,23 @@ class PortMap:
     protocol: str  # tcp | udp
 
 
+@dataclass(frozen=True)
+class AptRepo:
+    """A third-party apt repository ([[apt_repos]] in casper-dev.toml)."""
+
+    name: str
+    key: str  # URL of the signing key (binary .gpg or ASCII-armored)
+    url: str
+    suite: str = ""  # empty = the base image's codename; ending in "/" = flat repository
+    components: tuple[str, ...] = ()
+    key_fingerprint: str = ""  # optional: 40 hex digits, upper case, no spaces
+
+    @property
+    def build_arg(self) -> str:
+        """name|key|url|suite|components|fingerprint, as dev/add_apt_repos.sh reads it."""
+        return "|".join([self.name, self.key, self.url, self.suite, ",".join(self.components), self.key_fingerprint])
+
+
 @dataclass
 class Config:
     kind: str  # RELEASE | DEV
@@ -89,6 +106,7 @@ class Config:
     os: str = ""  # as written in the config, e.g. ubuntu:26.04
     base_image: str = ""  # fully qualified, e.g. docker.io/library/ubuntu:26.04
     packages: list[str] = field(default_factory=list)
+    apt_repos: list[AptRepo] = field(default_factory=list)
 
     @property
     def tool(self) -> str:
@@ -288,6 +306,13 @@ _CPUSET_RE = re.compile(r"^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$")
 # apt package name, optionally with :arch and/or =version
 # apt mirror URL: http(s)://host[:port][/path], no characters that need quoting
 _APT_MIRROR_RE = re.compile(r"^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$")
+# [[apt_repos]]: URLs without characters that need quoting (or the | used in the build arg)
+_REPO_URL_RE = re.compile(r"^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/%+=@-]*)?$")
+_REPO_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+_REPO_WORD_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_FINGERPRINT_RE = re.compile(r"^[0-9A-F]{40}$")
+# Files the image already has in /etc/apt/sources.list.d (Ubuntu/Debian sources, Firefox)
+_RESERVED_REPO_NAMES = {"ubuntu", "debian", "mozilla"}
 _PACKAGE_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]*(:[a-z0-9-]+)?(=[A-Za-z0-9.+~:-]+)?$")
 
 
@@ -618,6 +643,7 @@ def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
             raise CasperError(f"Invalid entry in packages: {pkg!r} (expected an apt package name)")
     packages = list(dict.fromkeys(packages))  # drop duplicates, keep order
 
+    apt_repos = _parse_apt_repos(top)
     container = _parse_container(top, f"casper-dev-{os_slug(os_image)}", warnings)
     network = _parse_network(top, DEFAULT_PORTS[DEV])
     build = _parse_build(top)
@@ -635,4 +661,42 @@ def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
         os=os_image,
         base_image=base_image,
         packages=packages,
+        apt_repos=apt_repos,
     )
+
+
+def _parse_apt_repos(top: _Table) -> list[AptRepo]:
+    repos: list[AptRepo] = []
+    for t in top.array_of_tables("apt_repos"):
+        name = t.get("name", str)
+        if not _REPO_NAME_RE.match(name):
+            raise CasperError(f"{t.where}.name {name!r}: use lowercase letters, digits and '-'")
+        if name in _RESERVED_REPO_NAMES:
+            raise CasperError(f"{t.where}.name {name!r} is used by the image; choose another name")
+        if any(r.name == name for r in repos):
+            raise CasperError(f"{t.where}.name {name!r} is used twice")
+        key = t.get("key", str)
+        if not key.startswith("https://") or not _REPO_URL_RE.match(key):
+            raise CasperError(f"{t.where}.key must be an https:// URL of the signing key, got {key!r}")
+        url = t.get("url", str)
+        if not _REPO_URL_RE.match(url):
+            raise CasperError(f"{t.where}.url must be an http(s):// URL, got {url!r}")
+        suite = t.get("suite", str, "")
+        if suite and not _REPO_WORD_RE.match(suite.replace("/", "")):
+            raise CasperError(f"{t.where}.suite {suite!r} is not valid")
+        flat = suite.endswith("/")
+        components = t.get("components", list, [] if flat else ["main"])
+        for comp in components:
+            if not isinstance(comp, str) or not _REPO_WORD_RE.match(comp):
+                raise CasperError(f"{t.where}.components: invalid entry {comp!r}")
+        if flat and components:
+            raise CasperError(f"{t.where}: a flat repository (suite {suite!r}) has no components")
+        if not flat and not components:
+            raise CasperError(f"{t.where}.components must not be empty")
+        fingerprint = "".join(t.get("key_fingerprint", str, "").split()).upper()
+        fingerprint = fingerprint.removeprefix("0X")
+        if fingerprint and not _FINGERPRINT_RE.match(fingerprint):
+            raise CasperError(f"{t.where}.key_fingerprint must be 40 hex digits, got {fingerprint!r}")
+        t.finish()
+        repos.append(AptRepo(name, key, url, suite, tuple(components), fingerprint))
+    return repos

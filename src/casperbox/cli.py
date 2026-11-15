@@ -506,6 +506,9 @@ def make_app(kind: str) -> typer.Typer:
             rows.append(("patches", " ".join(p.name for p in cfg.toolflow.patch_scripts) or "-"))
         else:
             rows += [("os", cfg.base_image), ("packages", " ".join(cfg.packages) or "-")]
+            rows += [("apt repo", f"{r.name}: {r.url} {r.suite or '<codename>'} {' '.join(r.components)}".rstrip()
+                      + (" (key fingerprint checked)" if r.key_fingerprint else ""))
+                     for r in cfg.apt_repos] or [("apt repos", "-")]
         rows.append(("apt mirror", cfg.apt_mirror or "default"))
         rows += [
             ("image", cfg.image),

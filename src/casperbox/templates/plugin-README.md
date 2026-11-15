@@ -19,7 +19,7 @@ built-in one: `casperbox init --toolflow $name`, then `casperbox up`.
 |---|---|
 | `BASE_IMAGE` | Base image, fully qualified (e.g. `docker.io/library/ubuntu:22.04`) |
 | `VIVADO_VERSION` | `vivado.dir` must contain `Vivado/<VIVADO_VERSION>/settings64.sh` (up to 2024.x) or `<VIVADO_VERSION>/Vivado/settings64.sh` (from 2025.1), or be the Vivado directory itself |
-| `MINICONDA_INSTALLER`, `PYTHON_VERSION`, `CONDA_ENV_NAME` | conda env |
+| `CONDA_INSTALLER_URL`, `PYTHON_VERSION`, `CONDA_ENV_NAME` | conda env: Miniforge installer URL (or a mirror of it), Python version, env name |
 | `MLIB_DEVEL_REPO`, `MLIB_DEVEL_BRANCH` | mlib_devel, cloned to `~/toolflow/mlib_devel` |
 | `DEVICE_TREE_XLNX_REPO`, `DEVICE_TREE_XLNX_BRANCH` | device-tree-xlnx, usually `xlnx_rel_v<Vivado version>` |
 | `GIT_CLONE_DEPTH` | git clone depth (0 = full history) |

@@ -108,6 +108,21 @@ def test_broken_plugin_is_reported(user_dir):
         versions.load_toolflow("broken")
 
 
+def test_plugin_with_miniconda_key_gets_a_hint(user_dir):
+    """Plugins created before the switch to Miniforge have MINICONDA_INSTALLER."""
+    path = make_plugin(user_dir, "old")
+    toml = path / "toolflow.toml"
+    text = toml.read_text()
+    old = "\n".join('MINICONDA_INSTALLER = "Miniconda3-latest-Linux-x86_64.sh"'
+                    if line.startswith("CONDA_INSTALLER_URL =") else line for line in text.splitlines())
+    toml.write_text(old + "\n")
+    with pytest.raises(CasperError, match="MINICONDA_INSTALLER was replaced by CONDA_INSTALLER_URL") as e:
+        versions.load_toolflow("old")
+    assert "Miniforge3-Linux-x86_64.sh" in str(e.value)
+    toml.write_text(text)
+    assert "miniforge" in versions.load_toolflow("old").params["CONDA_INSTALLER_URL"]
+
+
 def test_config_with_plugin_version(tmp_path, user_dir):
     make_plugin(user_dir, "m2025a")
     cfg = config_for(tmp_path, "m2025a")

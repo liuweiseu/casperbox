@@ -1,5 +1,5 @@
 # casperbox-dev image: a plain base container with SSH, VNC, an XFCE desktop and Firefox.
-# Built by `casperbox-dev build`: BASE_IMAGE and PACKAGES come from the user's casper-dev.toml;
+# Built by `casperbox-dev build`: BASE_IMAGE, PACKAGES and APT_REPOS come from the user's casper-dev.toml;
 # the build context is the package's assets/ directory.
 
 ARG BASE_IMAGE=docker.io/library/ubuntu:26.04
@@ -36,10 +36,12 @@ ARG USER_GID=1000
 COPY common/scripts/create_user.sh /opt/casper/scripts/
 RUN CREATE_TOOLFLOW_DIRS=0 bash /opt/casper/scripts/create_user.sh
 
-# 4. Extra packages from casper-dev.toml (space-separated)
+# 4. Third-party apt repositories ([[apt_repos]]) and extra packages (packages) from casper-dev.toml
+ARG APT_REPOS=""
 ARG PACKAGES=""
-COPY dev/install_packages.sh /opt/casper/scripts/
-RUN bash /opt/casper/scripts/install_packages.sh ${PACKAGES}
+COPY dev/add_apt_repos.sh dev/install_packages.sh /opt/casper/scripts/
+RUN bash /opt/casper/scripts/add_apt_repos.sh \
+ && bash /opt/casper/scripts/install_packages.sh ${PACKAGES}
 
 # 5. Runtime files: sshd config, profile, entrypoint, VNC xstartup
 COPY common/rootfs/ /

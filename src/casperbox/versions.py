@@ -16,7 +16,7 @@ TOOLFLOW_KEYS = (
     "TOOLFLOW_VERSION",
     "BASE_IMAGE",
     "VIVADO_VERSION",
-    "MINICONDA_INSTALLER",
+    "CONDA_INSTALLER_URL",
     "PYTHON_VERSION",
     "CONDA_ENV_NAME",
     "MLIB_DEVEL_REPO",
@@ -171,6 +171,12 @@ def load_toolflow(version: str) -> Toolflow:
         raise CasperError(f"{path}: {e}") from e
 
     params: dict[str, str] = {}
+    if "MINICONDA_INSTALLER" in data and "CONDA_INSTALLER_URL" not in data:
+        raise CasperError(
+            f"{path}: MINICONDA_INSTALLER was replaced by CONDA_INSTALLER_URL (conda now comes from Miniforge); "
+            "replace that line with\n  CONDA_INSTALLER_URL = "
+            '"https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh"'
+        )
     for key in TOOLFLOW_KEYS:
         if key not in data:
             raise CasperError(f"{path} is missing {key}")

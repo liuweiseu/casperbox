@@ -11,8 +11,8 @@ BASE_IMAGE = "docker.io/library/ubuntu:20.04"
 # Vivado version: vivado.dir must contain Vivado/<VIVADO_VERSION>/settings64.sh (or <VIVADO_VERSION>/Vivado/ from 2025.1)
 VIVADO_VERSION = "2021.1"
 
-# Python / conda
-MINICONDA_INSTALLER = "Miniconda3-latest-Linux-x86_64.sh"
+# Python / conda: Miniforge installer (conda-forge only, no Anaconda Terms of Service)
+CONDA_INSTALLER_URL = "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh"
 PYTHON_VERSION = "3.14"
 CONDA_ENV_NAME = "casper"
 

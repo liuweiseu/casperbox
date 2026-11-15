@@ -2,7 +2,7 @@
 
 `casperbox` builds and runs CASPER toolflow development containers with rootless podman.
 
-The image includes openssh-server, TigerVNC (XFCE desktop), Firefox, Miniconda (conda env),
+The image includes openssh-server, TigerVNC (XFCE desktop), Firefox, Miniforge (conda env),
 mlib_devel, device-tree-xlnx and Scilab. Vivado and the license are mounted from the host.
 
 The package also installs `casperbox-dev`, which builds plain base containers for testing
@@ -238,7 +238,8 @@ sections as `casperbox.toml`, plus:
 | Key | Default | Description |
 |---|---|---|
 | `os` | `ubuntu:26.04` | Base image, `name:tag` of any apt-based image (Ubuntu / Debian) |
-| `packages` | `[]` | Extra apt packages installed into the image |
+| `packages` | `[]` | Extra apt packages installed into the image, also from the repositories below |
+| `[[apt_repos]]` | none | Third-party apt repositories, added before `packages` are installed |
 
 - Find image names and tags on [Docker Hub](https://hub.docker.com/_/ubuntu) or with
   `podman search --list-tags docker.io/library/ubuntu`. `casperbox-dev list` shows the tested images;
@@ -247,8 +248,43 @@ sections as `casperbox.toml`, plus:
 - Firefox comes from Mozilla's APT repository (packages.mozilla.org): on Ubuntu 22.04+ the
   distribution's `firefox` package is a snap wrapper, which does not work in containers.
 - Default ports are 2322 (SSH) and 5902 (VNC), so it can run next to a `casperbox` container.
-- Each config gets its own image (`casperbox-dev:<container.name>`); changing `os` or `packages`
-  rebuilds it on the next `casperbox-dev up`.
+- Each config gets its own image (`casperbox-dev:<container.name>`); changing `os`, `packages` or
+  `apt_repos` rebuilds it on the next `casperbox-dev up`.
+
+### Third-party apt repositories
+
+For software that is not in the Ubuntu archive but has its own apt repository. Take the values
+from the vendor's install instructions: `key` is the URL their `curl` command downloads, and their
+`deb [signed-by=...] <url> <suite> <components...>` line gives the rest. The packages go into
+`packages`:
+
+```toml
+packages = ["yazi", "code"]
+
+[[apt_repos]]
+name = "yazi"
+key = "https://yazi-rs.github.io/builds/yazi-keyring.gpg"
+url = "https://yazi-rs.github.io/builds/"
+suite = "stable"
+
+[[apt_repos]]
+name = "vscode"
+key = "https://packages.microsoft.com/keys/microsoft.asc"
+url = "https://packages.microsoft.com/repos/code"
+suite = "stable"
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `name` | | Lowercase letters, digits and `-`; names `/etc/apt/sources.list.d/<name>.sources` and `/etc/apt/keyrings/<name>.asc` / `.gpg` |
+| `key` | | `https://` URL of the signing key, binary or ASCII-armored |
+| `url` | | Repository URL |
+| `suite` | OS codename | e.g. `stable`; empty = the base image's codename (`noble`, ...), for repositories per Ubuntu release; `./` for a flat repository |
+| `components` | `["main"]` | none for a flat repository |
+| `key_fingerprint` | | Optional. If set, the build fails unless the downloaded key has this fingerprint (40 hex digits, spaces allowed). Use the fingerprint the vendor publishes; `curl -fsSL <key> \| gpg --show-keys` shows the downloaded key's |
+
+The repositories stay in the image, so `sudo apt upgrade` in the container updates their packages too.
+`[build] apt_mirror` only replaces the Ubuntu servers.
 - All other commands (`build`, `up`, `down`, `restart`, `shell`, `status`, `logs`, `config`, `ps`)
   work as in `casperbox`; `casperbox-dev init --os IMAGE` picks the base image.
 

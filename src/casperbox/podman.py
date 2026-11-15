@@ -113,7 +113,11 @@ def _build_arg_values(cfg: Config) -> dict[str, str]:
     if cfg.kind == RELEASE:
         args = dict(cfg.toolflow.params)
     else:
-        args = {"BASE_IMAGE": cfg.base_image, "PACKAGES": " ".join(cfg.packages)}
+        args = {
+            "BASE_IMAGE": cfg.base_image,
+            "PACKAGES": " ".join(cfg.packages),
+            "APT_REPOS": " ".join(r.build_arg for r in cfg.apt_repos),
+        }
     return {
         **args,
         "APT_MIRROR": cfg.apt_mirror,

@@ -9,7 +9,7 @@ FROM ${BASE_IMAGE}
 # ---- toolflow version args (from toolflow.toml) ----
 ARG TOOLFLOW_VERSION
 ARG VIVADO_VERSION
-ARG MINICONDA_INSTALLER
+ARG CONDA_INSTALLER_URL
 ARG PYTHON_VERSION
 ARG CONDA_ENV_NAME
 ARG MLIB_DEVEL_REPO
@@ -62,9 +62,9 @@ RUN bash /opt/casper/scripts/create_user.sh
 COPY common/scripts/install_scilab.sh /opt/casper/scripts/
 RUN bash /opt/casper/scripts/install_scilab.sh
 
-# 4. Miniconda
-COPY common/scripts/install_miniconda.sh /opt/casper/scripts/
-RUN bash /opt/casper/scripts/install_miniconda.sh
+# 4. conda (Miniforge)
+COPY common/scripts/install_conda.sh /opt/casper/scripts/
+RUN bash /opt/casper/scripts/install_conda.sh
 
 # 5. conda env + mlib_devel (run as the regular user so file ownership is correct)
 COPY common/scripts/setup_conda_env.sh common/scripts/config_mlib_devel.sh /opt/casper/scripts/
