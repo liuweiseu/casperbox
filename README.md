@@ -5,9 +5,9 @@
 The image includes openssh-server, TigerVNC (XFCE desktop), Firefox, Miniforge (conda env),
 mlib_devel, device-tree-xlnx and Scilab. Vivado and the license are mounted from the host.
 
-The package also installs `basebox`, a general-purpose container builder: any apt-based OS with SSH
+The package also installs `casperbox-base`, a general-purpose container builder: any apt-based OS with SSH
 and a VNC desktop, your packages and tools, optionally GPUs and fast NICs; also useful for early tests
-of CASPER toolflow components (see [basebox](#basebox)).
+of CASPER toolflow components (see [casperbox-base](#casperbox-base)).
 
 ## Supported versions
 
@@ -161,7 +161,7 @@ podman load -i mytoolflow.tar          # on another machine
 The image contains everything changed in the container (packages installed with apt, edits in
 `~/toolflow`, ...), but not the mounted directories (`~/work`, `~/.Xilinx`, `[[mounts]]`).
 It also contains the container's passwords and SSH host keys, so only share it with people who may
-know them. `basebox commit` works the same way.
+know them. `casperbox-base commit` works the same way.
 
 ## Plugins: your own toolflow versions
 
@@ -208,7 +208,7 @@ The container uses pasta networking (no bridge network). Ports are forwarded wit
 the interface is named `eth0`, and the container sees the same IP as the host.
 `container.mac` is applied with pasta's `--ns-mac-addr` (e.g. for a MAC-locked node-locked license);
 the interface exists only in the container's network namespace, so reusing the host NIC's MAC is safe.
-`basebox` can also share the host's network instead (`network.mode = "host"`, see
+`casperbox-base` can also share the host's network instead (`network.mode = "host"`, see
 [Fast NICs](#fast-nics-host-network-and-rdma)).
 
 ## After changing the config
@@ -221,21 +221,21 @@ the interface exists only in the container's network namespace, so reusing the h
 (Dockerfile, scripts, package lists), the toolflow version, `container.user` or the host UID/GID
 changed since the last build. `casperbox status` shows whether the image is up to date.
 
-## basebox
+## casperbox-base
 
-`basebox` builds general-purpose containers, e.g. to test software in: a base OS with SSH, a VNC
+`casperbox-base` builds general-purpose containers, e.g. to test software in: a base OS with SSH, a VNC
 (XFCE) desktop, Firefox and the packages you list, but no toolflow (no Vivado, mlib_devel, conda or Scilab)
 and no directories mounted by default.
 
 ```bash
-mkdir ~/basebox-test && cd ~/basebox-test
-basebox init                       # creates basebox.toml (default os: ubuntu:26.04)
-vi basebox.toml                    # set os, packages, mounts
-basebox up
-basebox shell
+mkdir ~/casperbox-base-test && cd ~/casperbox-base-test
+casperbox-base init           # creates casperbox-base.toml (default os: ubuntu:26.04)
+vi casperbox-base.toml        # set os, packages, mounts
+casperbox-base up
+casperbox-base shell
 ```
 
-`basebox.toml` has the same `[container]`, `[ports]`, `[vnc]`, `[build]`, `[[mounts]]` and `[[extra_ports]]`
+`casperbox-base.toml` has the same `[container]`, `[ports]`, `[vnc]`, `[build]`, `[[mounts]]` and `[[extra_ports]]`
 sections as `casperbox.toml`, plus:
 
 | Key | Default | Description |
@@ -250,7 +250,7 @@ sections as `casperbox.toml`, plus:
 | `ports.bind_address` | `0.0.0.0` | Also accepts a network interface name, e.g. `"eno1"` |
 
 - Find image names and tags on [Docker Hub](https://hub.docker.com/_/ubuntu) or with
-  `podman search --list-tags docker.io/library/ubuntu`. `basebox list` shows the tested images;
+  `podman search --list-tags docker.io/library/ubuntu`. `casperbox-base list` shows the tested images;
   others work with a warning.
 - Before building, the base image is pulled and checked to be apt-based.
 - Firefox comes from Mozilla's APT repository (packages.mozilla.org): on Ubuntu 22.04+ the
@@ -258,16 +258,16 @@ sections as `casperbox.toml`, plus:
 - The generated config sets `ports.ssh` and `ports.vnc` to 0, so `up` picks free host ports (and writes
   them back), and it can run next to a `casperbox` container. Without a `[ports]` section the defaults
   are 2322 (SSH) and 5902 (VNC).
-- basebox was called `casperbox-dev` before 0.5.0, and its config `casperbox-dev.toml` (or
+- `casperbox-base` was called `casperbox-dev` before 0.5.0, and its config `casperbox-dev.toml` (or
   `casper-dev.toml`). An old config in the current directory is still found (with a warning); after
-  `mv casperbox-dev.toml basebox.toml` its existing container still belongs to it. Configs written by
+  `mv casperbox-dev.toml casperbox-base.toml` its existing container still belongs to it. Configs written by
   the old `init` keep their container name (`casper-dev-<os>`); the image is now called
-  `basebox:<container.name>`, so the next `up` builds it once. Remove the old image with
+  `casperbox-base:<container.name>`, so the next `up` builds it once. Remove the old image with
   `podman rmi casperbox-dev:<container.name>`.
-- Each config gets its own image (`basebox:<container.name>`); changing `os`, `packages`,
-  `apt_repos` or `tools` rebuilds it on the next `basebox up`.
+- Each config gets its own image (`casperbox-base:<container.name>`); changing `os`, `packages`,
+  `apt_repos` or `tools` rebuilds it on the next `casperbox-base up`.
 - All other commands (`build`, `up`, `down`, `restart`, `shell`, `status`, `logs`, `config`, `ps`)
-  work as in `casperbox`; `basebox init --os IMAGE` picks the base image.
+  work as in `casperbox`; `casperbox-base init --os IMAGE` picks the base image.
 
 ### Third-party apt repositories
 
@@ -338,10 +338,10 @@ tar -xzf "lazygit_${VERSION}_linux_x86_64.tar.gz" -C /usr/local/bin lazygit
 `container.gpus = "0"`, `"0,1"` or `"all"` passes NVIDIA GPUs into the container, with
 `--ulimit nofile=65535`. Set `shm_size` (e.g. `"32g"`) for data loaders. `up` checks that `nvidia-ctk`
 exists and that every device is in the CDI list, and prints the commands below if not. The GPUs are
-fixed when the container is created: edit `gpus` and run `basebox up` to recreate it (no rebuild).
-`basebox status` shows the GPUs of the running container.
+fixed when the container is created: edit `gpus` and run `casperbox-base up` to recreate it (no rebuild).
+`casperbox-base status` shows the GPUs of the running container.
 
-basebox gives the GPUs to podman as **CDI** (Container Device Interface) devices,
+`casperbox-base` gives the GPUs to podman as **CDI** (Container Device Interface) devices,
 `nvidia.com/gpu=N`. A CDI spec file, normally `/etc/cdi/nvidia.yaml`, describes the devices; podman
 reads it and puts the `/dev/nvidia*` device nodes and the driver's libraries (`libcuda`, `nvidia-smi`,
 ...) into the container. The host needs, set up once by an administrator:
@@ -380,7 +380,7 @@ packages), Docker, or root to run the container.
 | `nvidia-ctk is not installed` | Install `nvidia-container-toolkit` (step 1). |
 | `CDI device(s) not found: nvidia.com/gpu=N` | No spec yet, or an index that does not exist: run step 2 and compare with `nvidia-ctk cdi list`. |
 | `unresolvable CDI devices` from podman | The spec is not in `/etc/cdi` or `/var/run/cdi`, or it is unreadable for your user. |
-| `nvidia-smi` fails in the container after a driver upgrade | The spec is from the old driver: regenerate it (step 2), then `basebox up`. |
+| `nvidia-smi` fails in the container after a driver upgrade | The spec is from the old driver: regenerate it (step 2), then `casperbox-base up`. |
 
 ### Fast NICs: host network and RDMA
 
@@ -403,10 +403,10 @@ rdma = "all"               # or "mlx5_0,mlx5_1"; see `ibv_devices` on the host
 
 - **The host's addresses.** In host mode the container uses the host's IPs and MAC addresses, so a
   license bound to the host's MAC works; `container.mac` and `[[extra_ports]]` have no effect (with a warning).
-- **`bind_address`** can be an interface name in basebox; `up` looks up its IPv4 address (and
+- **`bind_address`** can be an interface name in casperbox-base; `up` looks up its IPv4 address (and
   prints it). With `0.0.0.0` SSH and VNC listen on every NIC, the fast ones included.
 - **Ports** are the host's own: `up` checks that they are free, and `0` picks free ones. The ports are
-  kept in a container label, so `basebox ps` shows them and other containers do not take them.
+  kept in a container label, so `casperbox-base ps` shows them and other containers do not take them.
 - **The VNC display `:1` must be free on the host**, because host networking also shares abstract unix
   sockets; `up` checks it.
 - **`container.rdma`** (InfiniBand or RoCE) passes the `/dev/infiniband/uverbs*` nodes of the devices
@@ -426,7 +426,7 @@ src/casperbox/
 ├── podman.py          podman build/run arguments and container queries
 ├── versions.py        toolflow versions: built-in (assets/versions) and plugins
 ├── plugins.py         `plugin new` / `plugin check`
-├── templates/         casperbox.toml, basebox.toml and plugin README templates
+├── templates/         casperbox.toml, casperbox-base.toml and plugin README templates
 └── assets/            build context (see below)
 tests/                 pytest tests; smoke/ container smoke test
 ```
@@ -446,7 +446,7 @@ CI (`.github/workflows/ci.yml`) runs on every push and pull request to `main` an
 |---|---|
 | Lint | ruff on the Python code, shellcheck on all shell scripts |
 | Unit tests | pytest on Python 3.11 – 3.14; both CLIs start |
-| basebox container | for each tested OS: build and start a container, then check SSH password login, VNC, an extra forwarded port, a read-only mount, the MAC address, the host UID/GID, sudo and Firefox |
+| casperbox-base container | for each tested OS: build and start a container, then check SSH password login, VNC, an extra forwarded port, a read-only mount, the MAC address, the host UID/GID, sudo and Firefox |
 | casperbox container | the same for m2021a (with a stub Vivado), plus the conda env, `XILINX_PATH`, mlib_devel, device-tree-xlnx, Scilab and a writable `~/work` |
 
 The container jobs only check that the environment comes up; toolflow functionality is not tested.
@@ -454,7 +454,7 @@ They run `tests/smoke/smoke.sh`, which also works on a host (needs `sshpass` and
 container is called `smoke-<tool>`, uses ports 22022/25901/28888 and is removed afterwards):
 
 ```bash
-tests/smoke/smoke.sh basebox --os ubuntu:24.04
+tests/smoke/smoke.sh casperbox-base --os ubuntu:24.04
 tests/smoke/smoke.sh casperbox
 ```
 
@@ -470,7 +470,7 @@ versions/<version>/
     pkgs.list                   extra apt packages of this version (e.g. Vivado runtime deps); may be empty
     patch/*.sh                  optional: version-specific fixes, run as root at the end of the build
     Dockerfile                  optional: replaces toolflow/Dockerfile for this version
-dev/                            basebox: Dockerfile, base.list, install scripts
+dev/                            casperbox-base: Dockerfile, base.list, install scripts
 ```
 
 Package lists have one apt package per line; `#` starts a comment and a trailing `?` marks an

@@ -12,7 +12,7 @@ from casperbox.errors import CasperError
 
 @pytest.fixture
 def fake_podman(tmp_path: Path, monkeypatch):
-    cfg = tmp_path / "basebox.toml"
+    cfg = tmp_path / "casperbox-base.toml"
     cfg.write_text(f'os = "{DEV_DEFAULT_OS}"\n[container]\nname = "t1"\n')
     calls: list[str] = []
     existing = podman.ContainerInfo(

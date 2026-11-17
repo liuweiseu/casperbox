@@ -53,15 +53,15 @@ jobs:
         run: |
           uv run casperbox --version
           uv run casperbox list
-          uv run basebox --version
-          uv run basebox list
+          uv run casperbox-base --version
+          uv run casperbox-base list
 
   # ---------------------------------------------------------------------------
   # Containers: build and start them with real rootless podman, then check that
   # SSH, VNC, an extra port, mounts and the MAC address work (tests/smoke/smoke.sh)
   # ---------------------------------------------------------------------------
-  basebox-container:
-    name: basebox container (${{ matrix.os }})
+  base-container:
+    name: casperbox-base container (${{ matrix.os }})
     needs: [lint, unit-tests]
     runs-on: ubuntu-26.04
     timeout-minutes: 45
@@ -76,7 +76,7 @@ jobs:
         # GitHub's Azure Ubuntu mirror: fast from the runners, and tests build.apt_mirror
         env:
           SMOKE_APT_MIRROR: http://azure.archive.ubuntu.com/ubuntu
-        run: tests/smoke/smoke.sh basebox --os "${{ matrix.os }}"
+        run: tests/smoke/smoke.sh casperbox-base --os "${{ matrix.os }}"
 
   toolflow-container:
     name: casperbox container (m2021a)

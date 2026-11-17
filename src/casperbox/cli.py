@@ -1,5 +1,5 @@
 """Command-line interfaces: `casperbox` (CASPER toolflow containers) and
-`basebox` (general-purpose base containers). Both are built by make_app()
+`casperbox-base` (general-purpose base containers). Both are built by make_app()
 and share every command except `list` and `init`."""
 
 from __future__ import annotations
@@ -323,7 +323,7 @@ def make_app(kind: str) -> typer.Typer:
         own = podman.get_container(cfg.name)
         if own:
             podman.check_owner(cfg, own)
-        podman.resolve_host_settings(cfg)  # interface name -> IP, RDMA device nodes (basebox)
+        podman.resolve_host_settings(cfg)  # interface name -> IP, RDMA device nodes (casperbox-base)
         if cfg.bind_name:
             info(f"ports.bind_address {cfg.bind_name} = {cfg.bind_address}")
         podman.check_host_display(cfg, own)
@@ -613,7 +613,7 @@ def main() -> None:
 
 
 def main_dev() -> None:
-    """The `basebox` command."""
+    """The `casperbox-base` command."""
     _run(dev_app)
 
 

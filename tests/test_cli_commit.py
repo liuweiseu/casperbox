@@ -13,7 +13,7 @@ from casperbox.errors import CasperError
 
 @pytest.fixture
 def cmds(tmp_path: Path, monkeypatch):
-    cfg = tmp_path / "basebox.toml"
+    cfg = tmp_path / "casperbox-base.toml"
     cfg.write_text(f'os = "{DEV_DEFAULT_OS}"\n[container]\nname = "Dev1"\n')
     existing = podman.ContainerInfo(
         "Dev1", "running", "Up", {podman.LABEL_CONFIG: str(cfg.resolve()), podman.LABEL_KIND: "dev"}, []

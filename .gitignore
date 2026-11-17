@@ -1,6 +1,6 @@
-# casperbox and basebox configs (contain local paths and passwords)
+# casperbox and casperbox-base configs (contain local paths and passwords)
 /casperbox.toml
-/basebox.toml
+/casperbox-base.toml
 /casperbox-dev.toml
 /casper-dev.toml
 

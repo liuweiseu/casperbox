@@ -311,11 +311,11 @@ def test_check_owner_messages(env):
     assert f"podman rm -f {cfg.name}" in str(e.value)
 
     other = ContainerInfo(
-        cfg.name, "running", "Up", {"casperbox.config": "/other/basebox.toml", "casperbox.kind": "dev"}, []
+        cfg.name, "running", "Up", {"casperbox.config": "/other/casperbox-base.toml", "casperbox.kind": "dev"}, []
     )
-    with pytest.raises(CasperError, match="created by /other/basebox.toml") as e:
+    with pytest.raises(CasperError, match="created by /other/casperbox-base.toml") as e:
         check_owner(cfg, other)
-    assert "`basebox ps`" in str(e.value)
+    assert "`casperbox-base ps`" in str(e.value)
 
 
 def test_apt_mirror(env, monkeypatch):
