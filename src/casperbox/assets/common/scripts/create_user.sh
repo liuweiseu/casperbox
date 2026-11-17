@@ -28,7 +28,7 @@ useradd -m -u "${USER_UID}" -g "${group_name}" -G sudo -s /bin/bash "${CONTAINER
 home_dir="/home/${CONTAINER_USER}"
 
 # Pre-create mount points and work directories with correct ownership
-# (CREATE_TOOLFLOW_DIRS=0 for casperbox-dev images, which have no toolflow).
+# (CREATE_TOOLFLOW_DIRS=0 for basebox images, which have no toolflow).
 # The VNC directory is created by the entrypoint: ~/.vnc or ~/.config/tigervnc, depending on the TigerVNC version.
 if [[ "${CREATE_TOOLFLOW_DIRS:-1}" == 1 ]]; then
     mkdir -p "${home_dir}/work" "${home_dir}/.Xilinx" "${home_dir}/toolflow"

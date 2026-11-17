@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Container entrypoint (runs as root):
 #   1. Set the user password from CONTAINER_PWD and the VNC password from VNC_PASSWORD
-#   2. Start sshd (22) and vncserver :1 (5901); in host network mode (casperbox-dev) on the ports
+#   2. Start sshd (22) and vncserver :1 (5901); in host network mode (basebox) on the ports
 #      and the address given by CASPERBOX_SSH_PORT / CASPERBOX_VNC_PORT / CASPERBOX_BIND
 #   3. Stay in the foreground, restart sshd / vncserver if they stop, clean up on stop signals
 #
@@ -12,7 +12,7 @@ set -uo pipefail
 log() { echo "[entrypoint] $(date '+%H:%M:%S') $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
-# toolflow.env: casperbox images; container.env: casperbox-dev images
+# toolflow.env: casperbox images; container.env: basebox images
 # shellcheck disable=SC1091
 [[ -r /etc/casper/toolflow.env ]] && . /etc/casper/toolflow.env
 # shellcheck disable=SC1091
@@ -30,8 +30,8 @@ if [[ ! "${VNC_GEOMETRY}" =~ ^[0-9]+x[0-9]+$ ]]; then
     VNC_GEOMETRY=1920x1080
 fi
 
-# ---- Listening address (casperbox-dev network.mode = "host") ----
-# With the host's network the services listen on the host's ports themselves: casperbox-dev then sets
+# ---- Listening address (basebox network.mode = "host") ----
+# With the host's network the services listen on the host's ports themselves: basebox then sets
 # the ports and the address of ports.bind_address. Without them (pasta networking) sshd and VNC use
 # their default ports on every address of the container, and podman publishes them.
 ssh_port="${CASPERBOX_SSH_PORT:-}"

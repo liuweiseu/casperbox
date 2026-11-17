@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Add the third-party apt repositories of [[apt_repos]] in casperbox-dev.toml.
+# Add the third-party apt repositories of [[apt_repos]] in basebox.toml.
 #
 #   APT_REPOS: space-separated entries "name|key|url|suite|components|fingerprint", written by
 #              casperbox (AptRepo.build_arg); suite empty = the OS codename, ending in "/" = flat
@@ -83,7 +83,7 @@ for entry in "${repos[@]}"; do
         exit 1
     fi
     {
-        echo "# [[apt_repos]] ${name} in casperbox-dev.toml"
+        echo "# [[apt_repos]] ${name} in basebox.toml"
         echo "Types: deb"
         echo "URIs: ${url}"
         echo "Suites: ${suite}"

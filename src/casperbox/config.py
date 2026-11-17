@@ -1,7 +1,7 @@
-"""Config files: casperbox.toml (toolflow containers) and casperbox-dev.toml (dev containers).
+"""Config files: casperbox.toml (toolflow containers) and basebox.toml (general-purpose containers).
 
 Both share [container], [ports], [vnc], [build], [[mounts]] and [[extra_ports]]; casperbox.toml adds
-the toolflow version, [vivado] and [paths]; casperbox-dev.toml adds the base OS, packages,
+the toolflow version, [vivado] and [paths]; basebox.toml adds the base OS, packages,
 [[apt_repos]], [[tools]], [network] mode, container.gpus and container.rdma, and accepts a network
 interface name as ports.bind_address.
 """
@@ -23,13 +23,15 @@ from .errors import CasperError
 from .versions import Toolflow, assets_dir, load_toolflow
 
 RELEASE = "release"  # casperbox: CASPER toolflow containers
-DEV = "dev"  # casperbox-dev: plain base containers for testing
+DEV = "dev"  # basebox: general-purpose base containers (kind label value kept as "dev")
 
 DEFAULT_CONFIG_NAME = "casperbox.toml"
-DEV_CONFIG_NAME = "casperbox-dev.toml"
-LEGACY_DEV_CONFIG_NAME = "casper-dev.toml"  # name used before 0.4.7, still found
+DEV_CONFIG_NAME = "basebox.toml"
+# Names of the basebox config used before (casperbox-dev.toml until 0.4.x, casper-dev.toml before
+# that); still found in the current directory, with a warning
+LEGACY_DEV_CONFIG_NAMES = ("casperbox-dev.toml", "casper-dev.toml")
 CONFIG_NAMES = {RELEASE: DEFAULT_CONFIG_NAME, DEV: DEV_CONFIG_NAME}
-TOOL_NAMES = {RELEASE: "casperbox", DEV: "casperbox-dev"}
+TOOL_NAMES = {RELEASE: "casperbox", DEV: "basebox"}
 
 # Default host ports; dev uses other ports so both can run side by side
 DEFAULT_PORTS = {RELEASE: (2222, 5901), DEV: (2322, 5902)}
@@ -37,11 +39,11 @@ DEFAULT_PORTS = {RELEASE: (2222, 5901), DEV: (2322, 5902)}
 AUTO_PORT = 0
 AUTO_PORT_START = {"ssh": 2222, "vnc": 5901}
 
-# Base images casperbox-dev has been tested with; others work with a warning
+# Base images basebox has been tested with; others work with a warning
 DEV_TESTED_OS = ("ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04")
 DEV_DEFAULT_OS = "ubuntu:26.04"
 
-NETWORK_MODES = ("pasta", "host")  # casperbox-dev network.mode
+NETWORK_MODES = ("pasta", "host")  # basebox network.mode
 
 # Container ports used by the image itself
 SSH_CONTAINER_PORT = 22
@@ -64,7 +66,7 @@ class PortMap:
 
 @dataclass(frozen=True)
 class AptRepo:
-    """A third-party apt repository ([[apt_repos]] in casperbox-dev.toml)."""
+    """A third-party apt repository ([[apt_repos]] in basebox.toml)."""
 
     name: str
     key: str  # URL of the signing key (binary .gpg or ASCII-armored)
@@ -81,7 +83,7 @@ class AptRepo:
 
 @dataclass(frozen=True)
 class Tool:
-    """A tool installed by a script at build time ([[tools]] in casperbox-dev.toml)."""
+    """A tool installed by a script at build time ([[tools]] in basebox.toml)."""
 
     name: str
     script: str
@@ -118,7 +120,7 @@ class Config:
     vivado_mount: str = "ro"
     license_dir: Path | None = None
     work_dir: Path | None = None
-    # casperbox-dev only
+    # basebox only
     os: str = ""  # as written in the config, e.g. ubuntu:26.04
     base_image: str = ""  # fully qualified, e.g. docker.io/library/ubuntu:26.04
     packages: list[str] = field(default_factory=list)
@@ -147,7 +149,7 @@ class Config:
         if self.toolflow:
             return self.toolflow.image
         # one image per dev config: each may install different packages
-        return f"casperbox-dev:{self.name}"
+        return f"basebox:{self.name}"
 
     @property
     def dockerfile(self) -> Path:
@@ -204,7 +206,7 @@ class Config:
 
 
 # ---------------------------------------------------------------------------
-# Base image names (casperbox-dev)
+# Base image names (basebox)
 # ---------------------------------------------------------------------------
 
 _COMPONENT = r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
@@ -274,7 +276,7 @@ def render_template(toolflow: Toolflow) -> str:
 
 def render_dev_template(image: str) -> str:
     normalize_image(image)  # validate before writing the file
-    return _template("casperbox-dev.toml").substitute(os=image, name=f"casper-dev-{os_slug(image)}")
+    return _template("basebox.toml").substitute(os=image, name=f"basebox-{os_slug(image)}")
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +346,7 @@ _REPO_WORD_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _FINGERPRINT_RE = re.compile(r"^[0-9A-F]{40}$")
 # Files the image already has in /etc/apt/sources.list.d (Ubuntu/Debian sources, Firefox)
 _RESERVED_REPO_NAMES = {"ubuntu", "debian", "mozilla"}
-# casperbox-dev: [[tools]], container.gpus / rdma, interface names in ports.bind_address
+# basebox: [[tools]], container.gpus / rdma, interface names in ports.bind_address
 _TOOL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _TOOL_VERSION_RE = re.compile(r"^[A-Za-z0-9._+~:-]*$")
 _GPU_RE = re.compile(r"^[0-9]+$")
@@ -436,11 +438,12 @@ def resolve_config_path(path: Path | None, kind: str = RELEASE) -> Path:
     default = CONFIG_NAMES[kind]
     p = (path or Path(default)).expanduser()
     p = p if p.is_absolute() else Path.cwd() / p
-    legacy = Path.cwd() / LEGACY_DEV_CONFIG_NAME
-    if path is None and kind == DEV and not p.is_file() and legacy.is_file():
-        print(f"[WARN]  using {LEGACY_DEV_CONFIG_NAME}; the default name is now {default} "
-              f"(rename it with: mv {LEGACY_DEV_CONFIG_NAME} {default})", file=sys.stderr)
-        p = legacy
+    if path is None and kind == DEV and not p.is_file():
+        legacy = next((Path.cwd() / n for n in LEGACY_DEV_CONFIG_NAMES if (Path.cwd() / n).is_file()), None)
+        if legacy:
+            print(f"[WARN]  using {legacy.name}; the default name is now {default} "
+                  f"(rename it with: mv {legacy.name} {default})", file=sys.stderr)
+            p = legacy
     if not p.is_file():
         if path is None:
             raise CasperError(
@@ -484,7 +487,7 @@ def _parse_container(top: _Table, default_name: str, warnings: list[str], dev: b
         raise CasperError(f"Invalid container.shm_size: {shm_size!r}")
     tz = _check_no_newline(c.get("tz", str, "UTC"), "container.tz")
     limits = _parse_limits(c)
-    devices = {"gpus": _parse_gpus(c), "rdma": _parse_rdma(c)} if dev else {}  # casperbox-dev only
+    devices = {"gpus": _parse_gpus(c), "rdma": _parse_rdma(c)} if dev else {}  # basebox only
     c.finish()
     return {
         "name": name, "user": user, "password": password, "vnc_password": vnc_password,
@@ -548,7 +551,7 @@ def cpuset_cores(cpuset: str) -> list[int]:
 def _parse_network(
     top: _Table, default_ports: tuple[int, int], warnings: list[str], dev: bool = False, mac: str = ""
 ) -> dict[str, Any]:
-    """[ports], [vnc], [[extra_ports]]; for casperbox-dev also [network] and interface names."""
+    """[ports], [vnc], [[extra_ports]]; for basebox also [network] and interface names."""
     mode = "pasta"
     if dev:
         nt = top.table("network")
@@ -618,7 +621,7 @@ def _parse_network(
 def _parse_build(top: _Table, dev: bool = False) -> dict[str, Any]:
     b = top.table("build")
     apt_mirror = b.get("apt_mirror", str, "").strip()
-    # casperbox-dev: `packages` may stand in [build] (where the generated config has it) or at the top
+    # basebox: `packages` may stand in [build] (where the generated config has it) or at the top
     # level; a top-level key has to come before every table, so it cannot follow the other sections
     build_packages = b.get("packages", list, None) if dev else None
     b.finish()
@@ -727,7 +730,7 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
 
 
 def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
-    """casperbox-dev.toml"""
+    """basebox.toml"""
     base = cfg_path.parent
     top = _Table(doc, "")
     warnings: list[str] = []
@@ -750,7 +753,7 @@ def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
 
     apt_repos = _parse_apt_repos(top)
     tools = _parse_tools(top)
-    container = _parse_container(top, f"casper-dev-{os_slug(os_image)}", warnings, dev=True)
+    container = _parse_container(top, f"basebox-{os_slug(os_image)}", warnings, dev=True)
     network = _parse_network(top, DEFAULT_PORTS[DEV], warnings, dev=True, mac=container["mac"])
     mounts = _parse_mounts(top, base, container["user"], set(), warnings)
     top.finish()

@@ -1,4 +1,4 @@
-"""casperbox-dev: [[tools]], container.gpus / rdma, network.mode = "host" and interface names."""
+"""basebox: [[tools]], container.gpus / rdma, network.mode = "host" and interface names."""
 
 import os
 import re
@@ -24,7 +24,7 @@ INSTALL_TOOLS = assets_dir() / "dev" / "install_tools.sh"
 
 @pytest.fixture
 def make(tmp_path: Path):
-    cfg_path = tmp_path / "proj" / "casperbox-dev.toml"
+    cfg_path = tmp_path / "proj" / "basebox.toml"
     cfg_path.parent.mkdir()
 
     def _make(**doc):
@@ -154,7 +154,7 @@ def test_template_tools_example_works_when_uncommented():
     end = text.index("# ---", start)
     block = re.sub(r"^# ?", "", text[start:end], flags=re.MULTILINE)
     doc = tomllib.loads(text[:start] + block)
-    cfg = parse_dev_config(doc, Path("/tmp/casperbox-dev.toml"))
+    cfg = parse_dev_config(doc, Path("/tmp/basebox.toml"))
     assert [(t.name, t.run_as) for t in cfg.tools] == [("lazygit", "root"), ("shell-aliases", "user")]
     assert cfg.tools[0].version and '"$DEB_ARCH"' in cfg.tools[0].script and "${VERSION}" in cfg.tools[0].script
     subprocess.run(["bash", "-n"], input=cfg.tools[0].script, text=True, check=True)

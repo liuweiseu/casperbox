@@ -1,4 +1,4 @@
-"""casperbox-dev.toml [[apt_repos]]: parsing, the APT_REPOS build arg and dev/add_apt_repos.sh."""
+"""basebox.toml [[apt_repos]]: parsing, the APT_REPOS build arg and dev/add_apt_repos.sh."""
 
 import os
 import shutil
@@ -24,7 +24,7 @@ SCRIPT = assets_dir() / "dev" / "add_apt_repos.sh"
 
 
 def make(tmp_path: Path, *repos: dict, **doc):
-    return parse_dev_config({"os": DEV_DEFAULT_OS, "apt_repos": list(repos), **doc}, tmp_path / "casperbox-dev.toml")
+    return parse_dev_config({"os": DEV_DEFAULT_OS, "apt_repos": list(repos), **doc}, tmp_path / "basebox.toml")
 
 
 def test_parse_defaults(tmp_path):
@@ -74,7 +74,7 @@ def test_build_arg(tmp_path):
 
 
 def test_config_command_lists_repos(tmp_path, monkeypatch):
-    path = tmp_path / "casperbox-dev.toml"
+    path = tmp_path / "basebox.toml"
     path.write_text(f'os = "{DEV_DEFAULT_OS}"\npackages = ["yazi"]\n[[apt_repos]]\nname = "yazi"\n'
                     f'key = "{YAZI["key"]}"\nurl = "{YAZI["url"]}"\nsuite = "stable"\n')
     monkeypatch.chdir(tmp_path)
@@ -127,7 +127,7 @@ def test_script_writes_sources_and_keys(tmp_path, gpg_key):
     assert (apt / "keyrings" / "one.asc").read_bytes() == asc.read_bytes()
     assert (apt / "keyrings" / "two.gpg").read_bytes() == binary.read_bytes()
     assert (apt / "sources.list.d" / "one.sources").read_text() == (
-        "# [[apt_repos]] one in casperbox-dev.toml\nTypes: deb\nURIs: https://example.com/apt\n"
+        "# [[apt_repos]] one in basebox.toml\nTypes: deb\nURIs: https://example.com/apt\n"
         "Suites: stable\nComponents: main contrib\nSigned-By: /etc/apt/keyrings/one.asc\n"
     )
     two = (apt / "sources.list.d" / "two.sources").read_text()

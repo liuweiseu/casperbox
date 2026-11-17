@@ -22,7 +22,7 @@ def make(tmp_path: Path, ports: dict, extra_ports: list | None = None):
     data = {"os": DEV_DEFAULT_OS, "ports": ports}
     if extra_ports:
         data["extra_ports"] = extra_ports
-    return parse_dev_config(data, tmp_path / "casperbox-dev.toml")
+    return parse_dev_config(data, tmp_path / "basebox.toml")
 
 
 def test_zero_is_accepted_for_ssh_and_vnc_only(tmp_path):
@@ -87,7 +87,7 @@ def test_save_ports_keeps_the_rest_of_the_file(tmp_path):
 
 @pytest.fixture
 def up_env(tmp_path, monkeypatch, host):
-    cfg = tmp_path / "casperbox-dev.toml"
+    cfg = tmp_path / "basebox.toml"
     cfg.write_text(f'os = "{DEV_DEFAULT_OS}"\n[container]\nname = "t1"\n[ports]\nssh = 0   # auto\nvnc = 0\n')
     runs: list[list[str]] = []
     monkeypatch.setattr(podman, "check_dependencies", lambda: None)
@@ -104,7 +104,7 @@ def test_up_picks_and_saves_ports(up_env):
     cfg, runs = up_env
     r = CliRunner().invoke(cli.dev_app, ["up"])
     assert r.exit_code == 0, r.output
-    assert "Picked free host port(s) ssh 2223, vnc 5901; saved in casperbox-dev.toml" in r.output
+    assert "Picked free host port(s) ssh 2223, vnc 5901; saved in basebox.toml" in r.output
     assert "ssh = 2223   # auto\nvnc = 5901\n" in cfg.read_text()
     assert load_config(cfg, DEV).ssh_port == 2223
     run = runs[-1]

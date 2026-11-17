@@ -18,7 +18,7 @@ from casperbox.podman import build_args, container_env, run_args
 
 @pytest.fixture
 def dev(tmp_path: Path):
-    cfg_path = tmp_path / "proj" / "casperbox-dev.toml"
+    cfg_path = tmp_path / "proj" / "basebox.toml"
     cfg_path.parent.mkdir()
 
     def make(**doc):
@@ -59,20 +59,20 @@ def test_template_parses():
         doc = tomllib.loads(render_dev_template(image))
         assert doc["os"] == image
         assert doc["build"]["packages"] == []
-        assert doc["container"]["name"] == f"casper-dev-{os_slug(image)}"
+        assert doc["container"]["name"] == f"basebox-{os_slug(image)}"
         assert (doc["ports"]["ssh"], doc["ports"]["vnc"]) == (0, 0)  # auto
 
 
 def test_defaults(dev):
     cfg = dev()
-    assert cfg.name == "casper-dev-ubuntu-26.04"
-    assert cfg.image == "casperbox-dev:casper-dev-ubuntu-26.04"
+    assert cfg.name == "basebox-ubuntu-26.04"
+    assert cfg.image == "basebox:basebox-ubuntu-26.04"
     assert cfg.base_image == "docker.io/library/ubuntu:26.04"
     assert (cfg.ssh_port, cfg.vnc_port) == (2322, 5902)
     assert cfg.mounts == [] and cfg.packages == []
     assert cfg.vivado_dir is None and cfg.work_dir is None
     assert cfg.warnings == []
-    assert cfg.tool == "casperbox-dev"
+    assert cfg.tool == "basebox"
 
 
 def test_untested_os_warns(dev):
@@ -107,7 +107,7 @@ def test_build_and_run_args(dev):
     b = build_args(cfg, Path("/ctx"))
     assert "BASE_IMAGE=docker.io/library/ubuntu:26.04" in b
     assert "PACKAGES=git vim" in b
-    assert b[b.index("-t") + 1] == "casperbox-dev:lab"
+    assert b[b.index("-t") + 1] == "basebox:lab"
     assert b[b.index("-f") + 1] == "/ctx/dev/Dockerfile" and b[-1] == "/ctx"
 
     r = run_args(cfg)
@@ -143,9 +143,28 @@ def test_legacy_config_name(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "casper-dev.toml").write_text("")
     assert resolve_config_path(None, DEV) == tmp_path / "casper-dev.toml"
-    assert "the default name is now casperbox-dev.toml" in capsys.readouterr().err
-    (tmp_path / "casperbox-dev.toml").write_text("")
+    assert "mv casper-dev.toml basebox.toml" in capsys.readouterr().err
+    (tmp_path / "casperbox-dev.toml").write_text("")  # the newer old name wins
     assert resolve_config_path(None, DEV) == tmp_path / "casperbox-dev.toml"
+    assert "mv casperbox-dev.toml basebox.toml" in capsys.readouterr().err
+    (tmp_path / "basebox.toml").write_text("")
+    assert resolve_config_path(None, DEV) == tmp_path / "basebox.toml"
+    assert capsys.readouterr().err == ""
+
+
+def test_renamed_config_still_owns_its_container(dev):
+    from casperbox import podman
+
+    cfg = dev()
+    old = cfg.path.parent / "casperbox-dev.toml"
+    labels = {podman.LABEL_CONFIG: str(old), podman.LABEL_KIND: "dev"}
+    podman.check_owner(cfg, podman.ContainerInfo(cfg.name, "running", "Up", labels, []))
+    old.write_text("")  # both files exist: the old one is a separate config
+    with pytest.raises(CasperError, match="was created by"):
+        podman.check_owner(cfg, podman.ContainerInfo(cfg.name, "running", "Up", labels, []))
+    other = {podman.LABEL_CONFIG: "/elsewhere/casperbox-dev.toml", podman.LABEL_KIND: "dev"}
+    with pytest.raises(CasperError, match="was created by"):
+        podman.check_owner(cfg, podman.ContainerInfo(cfg.name, "running", "Up", other, []))
 
 
 def test_packages_in_build_or_top_level(dev):

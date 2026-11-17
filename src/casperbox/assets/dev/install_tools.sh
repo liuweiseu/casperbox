@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Run the install scripts of [[tools]] from casperbox-dev.toml:
+# Run the install scripts of [[tools]] from basebox.toml:
 #
 #   install_tools.sh root|user DIR
 #
-# DIR holds NN-<name>.sh (the script) and NN-<name>.version for each tool, written by casperbox-dev in
+# DIR holds NN-<name>.sh (the script) and NN-<name>.version for each tool, written by basebox in
 # config order. Tools run one after the other and a failing script stops the build.
 #
 # Environment of a script: VERSION (the tool's `version`), DEB_ARCH (amd64 | arm64), CONTAINER_USER,

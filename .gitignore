@@ -1,5 +1,7 @@
-# casperbox configs (contain local paths and passwords)
+# casperbox and basebox configs (contain local paths and passwords)
 /casperbox.toml
+/basebox.toml
+/casperbox-dev.toml
 /casper-dev.toml
 
 # Python

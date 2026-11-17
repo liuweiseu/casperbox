@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Smoke test: create a container with casperbox or casperbox-dev and check that the
+# Smoke test: create a container with casperbox or basebox and check that the
 # environment comes up: SSH (password login), VNC, an extra forwarded port, mounts,
 # the MAC address and the basic software. Toolflow functionality is not tested here.
 #
 # Usage:
 #   tests/smoke/smoke.sh casperbox
-#   tests/smoke/smoke.sh casperbox-dev [--os IMAGE]
+#   tests/smoke/smoke.sh basebox [--os IMAGE]
 #
 # Requires: the casperbox tools on PATH, rootless podman + pasta, sshpass, curl.
 # Host ports can be changed with SMOKE_SSH_PORT / SMOKE_VNC_PORT / SMOKE_HTTP_PORT;
@@ -26,8 +26,8 @@ while (( $# )); do
     esac
 done
 case "${tool}" in
-    casperbox|casperbox-dev) ;;
-    *) echo "Usage: $0 casperbox | casperbox-dev [--os IMAGE]" >&2; exit 2 ;;
+    casperbox|basebox) ;;
+    *) echo "Usage: $0 casperbox | basebox [--os IMAGE]" >&2; exit 2 ;;
 esac
 for cmd in "${tool}" podman sshpass curl; do
     command -v "${cmd}" >/dev/null || { echo "Missing command: ${cmd}" >&2; exit 2; }
@@ -77,7 +77,7 @@ if [[ "${tool}" == casperbox ]]; then
     sed -i -e 's|^dir = "/tools/Xilinx"|dir = "./xilinx"|' \
            -e 's|^license_dir = "~/.Xilinx"|license_dir = "./lic"|' "${config}"
 else
-    config=casperbox-dev.toml
+    config=basebox.toml
     "${tool}" init --os "${os_image}"
     # python3 is used below for the forwarded-port test; it also tests `packages`
     sed -i 's|^packages = \[|packages = ["python3",|' "${config}"
@@ -226,13 +226,13 @@ step "Saving the container as an image with ${tool} commit"
 snapshot="localhost/${name}:smoke-snapshot"
 commit_args=("${snapshot}")
 # The toolflow image is large; only save the dev image to a tar file
-[[ "${tool}" == casperbox-dev ]] && commit_args+=(-o "${work}/snapshot.tar")
+[[ "${tool}" == basebox ]] && commit_args+=(-o "${work}/snapshot.tar")
 "${tool}" commit "${commit_args[@]}"
 check "Snapshot keeps the changes made in the container" kept \
     "$(podman run --rm --entrypoint cat "${snapshot}" /home/casper/restart-marker 2>&1 || true)"
 check "Snapshot has no casperbox build hash" "" \
     "$(podman image inspect -f '{{index .Labels "casperbox.build-hash"}}' "${snapshot}" 2>&1 || true)"
-if [[ "${tool}" == casperbox-dev ]]; then
+if [[ "${tool}" == basebox ]]; then
     check "Snapshot saved to a tar file" yes "$( [[ -s "${work}/snapshot.tar" ]] && echo yes || echo no)"
 fi
 podman rmi -f "${snapshot}" >/dev/null || true
@@ -248,7 +248,7 @@ if (( failures )); then
     echo "Smoke test FAILED: ${failures} check(s) failed"
     exit 1
 fi
-if [[ "${tool}" == casperbox-dev ]]; then
+if [[ "${tool}" == basebox ]]; then
     echo "Smoke test passed (${tool}, ${os_image})"
 else
     echo "Smoke test passed (${tool})"

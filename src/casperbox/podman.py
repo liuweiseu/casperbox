@@ -21,6 +21,7 @@ from .config import (
     AUTO_PORT,
     AUTO_PORT_START,
     DEV_TESTED_OS,
+    LEGACY_DEV_CONFIG_NAMES,
     RELEASE,
     SSH_CONTAINER_PORT,
     TOOL_NAMES,
@@ -34,9 +35,9 @@ from .errors import CasperError
 # Labels put on containers created by casperbox
 LABEL_MANAGED = "casperbox.managed"
 LABEL_CONFIG = "casperbox.config"
-LABEL_KIND = "casperbox.kind"  # release (casperbox) | dev (casperbox-dev)
+LABEL_KIND = "casperbox.kind"  # release (casperbox) | dev (basebox)
 LABEL_TOOLFLOW = "casperbox.toolflow"  # casperbox containers
-LABEL_OS = "casperbox.os"  # casperbox-dev containers
+LABEL_OS = "casperbox.os"  # basebox containers
 # Label put on images: hash of the build inputs, used to detect outdated images
 LABEL_BUILD_HASH = "casperbox.build-hash"
 LABEL_SNAPSHOT_OF = "casperbox.snapshot-of"  # images made by `commit`: source container
@@ -138,7 +139,7 @@ def _build_arg_values(cfg: Config) -> dict[str, str]:
 
 
 def tool_files(cfg: Config) -> dict[str, bytes]:
-    """casperbox-dev [[tools]] as files of the build context: tools/<root|user>/NN-<name>.sh and .version.
+    """basebox [[tools]] as files of the build context: tools/<root|user>/NN-<name>.sh and .version.
 
     NN is the position in the config, so scripts run in the order written there. Toolflow images
     have no tools (and no tools/ directory).
@@ -185,7 +186,7 @@ def build_hash(cfg: Config) -> str:
 @contextmanager
 def build_context(cfg: Config) -> Iterator[Path]:
     """Temporary build context: assets/common, toolflow/ and versions/<version>/ (from the package
-    or from a plugin directory), or for casperbox-dev: common/, dev/ and the generated tools/."""
+    or from a plugin directory), or for basebox: common/, dev/ and the generated tools/."""
     with tempfile.TemporaryDirectory(prefix="casperbox-build-") as tmp:
         root = Path(tmp)
         for name, src in cfg.build_sources:
@@ -234,7 +235,7 @@ def check_image_matches(cfg: Config) -> None:
 
 
 def check_base_image(cfg: Config) -> None:
-    """casperbox-dev: make sure the base image exists and is apt-based before building."""
+    """basebox: make sure the base image exists and is apt-based before building."""
     img = cfg.base_image
     hint = f"Check `os` in {cfg.path.name}; tested: {', '.join(DEV_TESTED_OS)}"
     if not image_exists(img) and subprocess.run(["podman", "pull", img], check=False).returncode != 0:
@@ -246,7 +247,7 @@ def check_base_image(cfg: Config) -> None:
     if r.returncode != 0:
         raise CasperError(
             f"Base image {img} is not an apt-based system (apt-get not found); "
-            f"casperbox-dev supports Ubuntu / Debian images.\n{hint}"
+            f"basebox supports Ubuntu / Debian images.\n{hint}"
         )
 
 
@@ -268,7 +269,7 @@ class ContainerInfo:
 
     @property
     def kind(self) -> str:
-        # containers created before casperbox-dev existed have no kind label
+        # containers created before basebox existed have no kind label
         return self.labels.get(LABEL_KIND, RELEASE)
 
 
@@ -450,7 +451,7 @@ def check_limits(cfg: Config) -> None:
 
 
 # ---------------------------------------------------------------------------
-# GPUs, RDMA and host networking (casperbox-dev)
+# GPUs, RDMA and host networking (basebox)
 # ---------------------------------------------------------------------------
 
 def gpu_args(cfg: Config) -> list[str]:
@@ -586,8 +587,16 @@ def rdma_args(cfg: Config) -> list[str]:
 
 
 def check_owner(cfg: Config, info: ContainerInfo) -> None:
-    """Refuse to touch a container that was created from another config file."""
+    """Refuse to touch a container that was created from another config file.
+
+    A basebox config renamed from an old default name (casperbox-dev.toml, casper-dev.toml) to the
+    current one in the same directory still owns its container; recreating it updates the label.
+    """
     if info.config_path == str(cfg.path):
+        return
+    old = Path(info.config_path)
+    if (cfg.kind == info.kind and old.parent == cfg.path.parent and old.name in LEGACY_DEV_CONFIG_NAMES
+            and not old.exists()):
         return
     if not info.config_path:
         raise CasperError(
