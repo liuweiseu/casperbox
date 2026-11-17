@@ -34,6 +34,8 @@ podman run --rm docker.io/library/ubuntu:20.04 true   # check: must finish witho
 ## Install
 
 ```bash
+uv tool install casperbox
+# or the latest development version from GitHub
 uv tool install git+https://github.com/<owner>/casperbox
 # or from a local clone
 uv tool install ./casperbox
