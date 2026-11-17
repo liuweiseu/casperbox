@@ -1,7 +1,9 @@
-"""Config files: casperbox.toml (toolflow containers) and casper-dev.toml (dev containers).
+"""Config files: casperbox.toml (toolflow containers) and casperbox-dev.toml (dev containers).
 
 Both share [container], [ports], [vnc], [build], [[mounts]] and [[extra_ports]]; casperbox.toml adds
-the toolflow version, [vivado] and [paths]; casper-dev.toml adds the base OS and packages.
+the toolflow version, [vivado] and [paths]; casperbox-dev.toml adds the base OS, packages,
+[[apt_repos]], [[tools]], [network] mode, container.gpus and container.rdma, and accepts a network
+interface name as ports.bind_address.
 """
 
 from __future__ import annotations
@@ -9,6 +11,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
+import sys
 import tomllib
 from dataclasses import dataclass, field
 from importlib.resources import files
@@ -23,7 +26,8 @@ RELEASE = "release"  # casperbox: CASPER toolflow containers
 DEV = "dev"  # casperbox-dev: plain base containers for testing
 
 DEFAULT_CONFIG_NAME = "casperbox.toml"
-DEV_CONFIG_NAME = "casper-dev.toml"
+DEV_CONFIG_NAME = "casperbox-dev.toml"
+LEGACY_DEV_CONFIG_NAME = "casper-dev.toml"  # name used before 0.4.7, still found
 CONFIG_NAMES = {RELEASE: DEFAULT_CONFIG_NAME, DEV: DEV_CONFIG_NAME}
 TOOL_NAMES = {RELEASE: "casperbox", DEV: "casperbox-dev"}
 
@@ -36,6 +40,8 @@ AUTO_PORT_START = {"ssh": 2222, "vnc": 5901}
 # Base images casperbox-dev has been tested with; others work with a warning
 DEV_TESTED_OS = ("ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04")
 DEV_DEFAULT_OS = "ubuntu:26.04"
+
+NETWORK_MODES = ("pasta", "host")  # casperbox-dev network.mode
 
 # Container ports used by the image itself
 SSH_CONTAINER_PORT = 22
@@ -58,7 +64,7 @@ class PortMap:
 
 @dataclass(frozen=True)
 class AptRepo:
-    """A third-party apt repository ([[apt_repos]] in casper-dev.toml)."""
+    """A third-party apt repository ([[apt_repos]] in casperbox-dev.toml)."""
 
     name: str
     key: str  # URL of the signing key (binary .gpg or ASCII-armored)
@@ -73,6 +79,16 @@ class AptRepo:
         return "|".join([self.name, self.key, self.url, self.suite, ",".join(self.components), self.key_fingerprint])
 
 
+@dataclass(frozen=True)
+class Tool:
+    """A tool installed by a script at build time ([[tools]] in casperbox-dev.toml)."""
+
+    name: str
+    script: str
+    version: str = ""  # passed to the script as $VERSION
+    run_as: str = "root"  # root | user
+
+
 @dataclass
 class Config:
     kind: str  # RELEASE | DEV
@@ -84,7 +100,7 @@ class Config:
     mac: str
     shm_size: str
     tz: str
-    bind_address: str
+    bind_address: str  # an IP address; `up` replaces an interface name (bind_name) by its address
     ssh_port: int
     vnc_port: int
     vnc_geometry: str
@@ -107,6 +123,12 @@ class Config:
     base_image: str = ""  # fully qualified, e.g. docker.io/library/ubuntu:26.04
     packages: list[str] = field(default_factory=list)
     apt_repos: list[AptRepo] = field(default_factory=list)
+    tools: list[Tool] = field(default_factory=list)
+    gpus: list[str] = field(default_factory=list)  # NVIDIA GPUs: indexes, or ["all"]
+    rdma: list[str] = field(default_factory=list)  # RDMA devices (mlx5_0, ...), or ["all"]
+    network_mode: str = "pasta"  # pasta | host
+    bind_name: str = ""  # ports.bind_address when it is an interface name (e.g. eno1)
+    rdma_paths: list[str] = field(default_factory=list)  # /dev/infiniband/* nodes, resolved by `up`
 
     @property
     def tool(self) -> str:
@@ -164,7 +186,16 @@ class Config:
         return f"/home/{self.user}"
 
     @property
+    def host_network(self) -> bool:
+        return self.network_mode == "host"
+
+    @property
     def all_ports(self) -> list[PortMap]:
+        """Host port -> container port of SSH, VNC and the extra ports. In host network mode nothing is
+        published: SSH and VNC listen on ssh_port / vnc_port of the host themselves, and extra_ports
+        have no meaning."""
+        if self.host_network:
+            return [PortMap(self.ssh_port, SSH_CONTAINER_PORT, "tcp"), PortMap(self.vnc_port, VNC_CONTAINER_PORT, "tcp")]
         return [
             PortMap(self.ssh_port, SSH_CONTAINER_PORT, "tcp"),
             PortMap(self.vnc_port, VNC_CONTAINER_PORT, "tcp"),
@@ -243,7 +274,7 @@ def render_template(toolflow: Toolflow) -> str:
 
 def render_dev_template(image: str) -> str:
     normalize_image(image)  # validate before writing the file
-    return _template("casper-dev.toml").substitute(os=image, name=f"casper-dev-{os_slug(image)}")
+    return _template("casperbox-dev.toml").substitute(os=image, name=f"casper-dev-{os_slug(image)}")
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +344,12 @@ _REPO_WORD_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _FINGERPRINT_RE = re.compile(r"^[0-9A-F]{40}$")
 # Files the image already has in /etc/apt/sources.list.d (Ubuntu/Debian sources, Firefox)
 _RESERVED_REPO_NAMES = {"ubuntu", "debian", "mozilla"}
+# casperbox-dev: [[tools]], container.gpus / rdma, interface names in ports.bind_address
+_TOOL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+_TOOL_VERSION_RE = re.compile(r"^[A-Za-z0-9._+~:-]*$")
+_GPU_RE = re.compile(r"^[0-9]+$")
+_RDMA_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$")
+_IFACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,14}$")
 _PACKAGE_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]*(:[a-z0-9-]+)?(=[A-Za-z0-9.+~:-]+)?$")
 
 
@@ -399,6 +436,11 @@ def resolve_config_path(path: Path | None, kind: str = RELEASE) -> Path:
     default = CONFIG_NAMES[kind]
     p = (path or Path(default)).expanduser()
     p = p if p.is_absolute() else Path.cwd() / p
+    legacy = Path.cwd() / LEGACY_DEV_CONFIG_NAME
+    if path is None and kind == DEV and not p.is_file() and legacy.is_file():
+        print(f"[WARN]  using {LEGACY_DEV_CONFIG_NAME}; the default name is now {default} "
+              f"(rename it with: mv {LEGACY_DEV_CONFIG_NAME} {default})", file=sys.stderr)
+        p = legacy
     if not p.is_file():
         if path is None:
             raise CasperError(
@@ -419,7 +461,7 @@ def load_config(path: Path | None = None, kind: str = RELEASE) -> Config:
     return parse_dev_config(doc, cfg_path) if kind == DEV else parse_config(doc, cfg_path)
 
 
-def _parse_container(top: _Table, default_name: str, warnings: list[str]) -> dict[str, Any]:
+def _parse_container(top: _Table, default_name: str, warnings: list[str], dev: bool = False) -> dict[str, Any]:
     c = top.table("container")
     name = c.get("name", str, default_name)
     if not _NAME_RE.match(name):
@@ -442,11 +484,38 @@ def _parse_container(top: _Table, default_name: str, warnings: list[str]) -> dic
         raise CasperError(f"Invalid container.shm_size: {shm_size!r}")
     tz = _check_no_newline(c.get("tz", str, "UTC"), "container.tz")
     limits = _parse_limits(c)
+    devices = {"gpus": _parse_gpus(c), "rdma": _parse_rdma(c)} if dev else {}  # casperbox-dev only
     c.finish()
     return {
         "name": name, "user": user, "password": password, "vnc_password": vnc_password,
-        "mac": mac, "shm_size": shm_size, "tz": tz, **limits,
+        "mac": mac, "shm_size": shm_size, "tz": tz, **limits, **devices,
     }
+
+
+def _parse_gpus(c: _Table) -> list[str]:
+    """container.gpus: "" (none), "0", "0,1" or "all" -> ["0", "1"] / ["all"]."""
+    raw = c.get("gpus", str, "").strip()
+    items = list(dict.fromkeys(raw.replace(",", " ").split()))
+    for item in items:
+        if item != "all" and not _GPU_RE.match(item):
+            raise CasperError(f"Invalid container.gpus: {raw!r}; expected GPU indexes such as '0' or '0,1', or 'all'")
+    if "all" in items and len(items) > 1:
+        raise CasperError("container.gpus: 'all' cannot be combined with other devices")
+    return items
+
+
+def _parse_rdma(c: _Table) -> list[str]:
+    """container.rdma: "" (none), "all" or RDMA device names "mlx5_0,mlx5_1" (see `ibv_devices`)."""
+    raw = c.get("rdma", str, "").strip()
+    items = list(dict.fromkeys(raw.replace(",", " ").split()))
+    for item in items:
+        if not _RDMA_RE.match(item):
+            raise CasperError(
+                f"Invalid container.rdma: {raw!r}; expected RDMA device names such as 'mlx5_0,mlx5_1', or 'all'"
+            )
+    if "all" in items and len(items) > 1:
+        raise CasperError("container.rdma: 'all' cannot be combined with device names")
+    return items
 
 
 def _parse_limits(c: _Table) -> dict[str, Any]:
@@ -476,13 +545,31 @@ def cpuset_cores(cpuset: str) -> list[int]:
     return cores
 
 
-def _parse_network(top: _Table, default_ports: tuple[int, int]) -> dict[str, Any]:
+def _parse_network(
+    top: _Table, default_ports: tuple[int, int], warnings: list[str], dev: bool = False, mac: str = ""
+) -> dict[str, Any]:
+    """[ports], [vnc], [[extra_ports]]; for casperbox-dev also [network] and interface names."""
+    mode = "pasta"
+    if dev:
+        nt = top.table("network")
+        mode = nt.get("mode", str, "pasta")
+        nt.finish()
+        if mode not in NETWORK_MODES:
+            raise CasperError(f"network.mode must be one of: {', '.join(NETWORK_MODES)}")
+
     pt = top.table("ports")
-    bind_address = pt.get("bind_address", str, "0.0.0.0")
+    bind_address = pt.get("bind_address", str, "0.0.0.0").strip()
+    bind_name = ""
     try:
         ipaddress.ip_address(bind_address)
     except ValueError as e:
-        raise CasperError(f"Invalid ports.bind_address: {bind_address!r}") from e
+        if not dev:
+            raise CasperError(f"Invalid ports.bind_address: {bind_address!r}") from e
+        if not _IFACE_RE.match(bind_address):
+            raise CasperError(
+                f"Invalid ports.bind_address: {bind_address!r}; expected an IP address or a network interface name"
+            ) from e
+        bind_name = bind_address  # `up` looks up its IPv4 address
     ssh_port = _check_port(pt.get("ssh", int, default_ports[0]), "ports.ssh", auto=True)
     vnc_port = _check_port(pt.get("vnc", int, default_ports[1]), "ports.vnc", auto=True)
     pt.finish()
@@ -504,9 +591,17 @@ def _parse_network(top: _Table, default_ports: tuple[int, int]) -> dict[str, Any
         if cport in (SSH_CONTAINER_PORT, VNC_CONTAINER_PORT):
             raise CasperError(f"{t.where}: container ports 22/5901 are reserved")
         extra_ports.append(PortMap(host, cport, proto))
+    if mode == "host":
+        if extra_ports:
+            warnings.append('network.mode = "host": [[extra_ports]] are ignored (programs in the container '
+                            "listen on the host's ports directly)")
+        if mac:
+            warnings.append('network.mode = "host": container.mac is ignored (the container uses the host\'s '
+                            "NICs and their MAC addresses)")
 
     seen: set[tuple[int, str]] = set()
-    for pm in [PortMap(ssh_port, 22, "tcp"), PortMap(vnc_port, 5901, "tcp"), *extra_ports]:
+    published = [PortMap(ssh_port, 22, "tcp"), PortMap(vnc_port, 5901, "tcp"), *([] if mode == "host" else extra_ports)]
+    for pm in published:
         if pm.host == AUTO_PORT:
             continue
         if (pm.host, pm.protocol) in seen:
@@ -516,19 +611,24 @@ def _parse_network(top: _Table, default_ports: tuple[int, int]) -> dict[str, Any
     return {
         "bind_address": bind_address, "ssh_port": ssh_port, "vnc_port": vnc_port,
         "vnc_geometry": vnc_geometry, "extra_ports": extra_ports,
+        **({"network_mode": mode, "bind_name": bind_name} if dev else {}),
     }
 
 
-def _parse_build(top: _Table) -> dict[str, Any]:
+def _parse_build(top: _Table, dev: bool = False) -> dict[str, Any]:
     b = top.table("build")
     apt_mirror = b.get("apt_mirror", str, "").strip()
+    # casperbox-dev: `packages` may stand in [build] (where the generated config has it) or at the top
+    # level; a top-level key has to come before every table, so it cannot follow the other sections
+    build_packages = b.get("packages", list, None) if dev else None
     b.finish()
     if apt_mirror and not _APT_MIRROR_RE.match(apt_mirror):
         raise CasperError(
             f"Invalid build.apt_mirror: {apt_mirror!r}; expected an http(s) URL of an Ubuntu mirror, "
             "e.g. 'http://us.archive.ubuntu.com/ubuntu'"
         )
-    return {"apt_mirror": apt_mirror.rstrip("/")}
+    result: dict[str, Any] = {"apt_mirror": apt_mirror.rstrip("/")}
+    return {**result, "packages": build_packages} if dev else result
 
 
 def _parse_mounts(top: _Table, base: Path, user: str, reserved: set[str], warnings: list[str]) -> list[Mount]:
@@ -604,7 +704,7 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
     if work_dir.is_dir():  # created by `up` if missing
         _check_readable(work_dir, "paths.work_dir", warnings)
 
-    network = _parse_network(top, DEFAULT_PORTS[RELEASE])
+    network = _parse_network(top, DEFAULT_PORTS[RELEASE], warnings)
     build = _parse_build(top)
     home = f"/home/{user}"
     mounts = _parse_mounts(top, base, user, {str(vivado_dir), f"{home}/.Xilinx", f"{home}/work", f"{home}/toolflow"}, warnings)
@@ -627,7 +727,7 @@ def parse_config(doc: dict[str, Any], cfg_path: Path) -> Config:
 
 
 def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
-    """casper-dev.toml"""
+    """casperbox-dev.toml"""
     base = cfg_path.parent
     top = _Table(doc, "")
     warnings: list[str] = []
@@ -637,16 +737,21 @@ def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
     if base_image not in {normalize_image(t) for t in DEV_TESTED_OS}:
         warnings.append(f"os {os_image!r} has not been tested (tested: {', '.join(DEV_TESTED_OS)})")
 
-    packages = top.get("packages", list, [])
+    build = _parse_build(top, dev=True)
+    top_packages = top.get("packages", list, None)
+    build_packages = build.pop("packages")
+    if top_packages is not None and build_packages is not None:
+        raise CasperError("packages is set both at the top level and in [build]; use one of them")
+    packages = top_packages if top_packages is not None else (build_packages or [])
     for pkg in packages:
         if not isinstance(pkg, str) or not _PACKAGE_RE.match(pkg):
             raise CasperError(f"Invalid entry in packages: {pkg!r} (expected an apt package name)")
     packages = list(dict.fromkeys(packages))  # drop duplicates, keep order
 
     apt_repos = _parse_apt_repos(top)
-    container = _parse_container(top, f"casper-dev-{os_slug(os_image)}", warnings)
-    network = _parse_network(top, DEFAULT_PORTS[DEV])
-    build = _parse_build(top)
+    tools = _parse_tools(top)
+    container = _parse_container(top, f"casper-dev-{os_slug(os_image)}", warnings, dev=True)
+    network = _parse_network(top, DEFAULT_PORTS[DEV], warnings, dev=True, mac=container["mac"])
     mounts = _parse_mounts(top, base, container["user"], set(), warnings)
     top.finish()
 
@@ -662,6 +767,7 @@ def parse_dev_config(doc: dict[str, Any], cfg_path: Path) -> Config:
         base_image=base_image,
         packages=packages,
         apt_repos=apt_repos,
+        tools=tools,
     )
 
 
@@ -700,3 +806,27 @@ def _parse_apt_repos(top: _Table) -> list[AptRepo]:
         t.finish()
         repos.append(AptRepo(name, key, url, suite, tuple(components), fingerprint))
     return repos
+
+
+def _parse_tools(top: _Table) -> list[Tool]:
+    tools: list[Tool] = []
+    for t in top.array_of_tables("tools"):
+        name = t.get("name", str)
+        if not _TOOL_NAME_RE.match(name):
+            raise CasperError(f"{t.where}.name {name!r}: use lowercase letters, digits, '.', '_' and '-'")
+        if any(x.name == name for x in tools):
+            raise CasperError(f"{t.where}.name {name!r} is used twice")
+        version = t.get("version", str, "").strip()
+        if not _TOOL_VERSION_RE.match(version):
+            raise CasperError(f"{t.where}.version {version!r} contains characters that are not allowed")
+        run_as = t.get("run_as", str, "root")
+        if run_as not in ("root", "user"):
+            raise CasperError(f"{t.where}.run_as must be 'root' or 'user'")
+        script = t.get("script", str)
+        t.finish()
+        if not script.strip():
+            raise CasperError(f"{t.where}.script must not be empty")
+        if "\0" in script:
+            raise CasperError(f"{t.where}.script must not contain NUL characters")
+        tools.append(Tool(name, script if script.endswith("\n") else script + "\n", version, run_as))
+    return tools

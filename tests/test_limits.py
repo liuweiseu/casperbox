@@ -11,7 +11,7 @@ from casperbox.errors import CasperError
 
 
 def make(tmp_path: Path, **container):
-    return parse_dev_config({"os": DEV_DEFAULT_OS, "container": container}, tmp_path / "casper-dev.toml")
+    return parse_dev_config({"os": DEV_DEFAULT_OS, "container": container}, tmp_path / "casperbox-dev.toml")
 
 
 def test_no_limits_by_default(tmp_path):

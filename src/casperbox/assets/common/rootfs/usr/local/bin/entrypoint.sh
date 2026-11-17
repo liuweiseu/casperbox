@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Container entrypoint (runs as root):
 #   1. Set the user password from CONTAINER_PWD and the VNC password from VNC_PASSWORD
-#   2. Start sshd (22) and vncserver :1 (5901)
+#   2. Start sshd (22) and vncserver :1 (5901); in host network mode (casperbox-dev) on the ports
+#      and the address given by CASPERBOX_SSH_PORT / CASPERBOX_VNC_PORT / CASPERBOX_BIND
 #   3. Stay in the foreground, restart sshd / vncserver if they stop, clean up on stop signals
 #
 # The services are independent: a failing VNC server must not take SSH down with it,
@@ -27,6 +28,27 @@ VNC_GEOMETRY="${VNC_GEOMETRY:-1920x1080}"
 if [[ ! "${VNC_GEOMETRY}" =~ ^[0-9]+x[0-9]+$ ]]; then
     log "Invalid VNC_GEOMETRY: ${VNC_GEOMETRY}, using 1920x1080"
     VNC_GEOMETRY=1920x1080
+fi
+
+# ---- Listening address (casperbox-dev network.mode = "host") ----
+# With the host's network the services listen on the host's ports themselves: casperbox-dev then sets
+# the ports and the address of ports.bind_address. Without them (pasta networking) sshd and VNC use
+# their default ports on every address of the container, and podman publishes them.
+ssh_port="${CASPERBOX_SSH_PORT:-}"
+vnc_port="${CASPERBOX_VNC_PORT:-}"
+bind_addr="${CASPERBOX_BIND:-}"
+[[ -z "${ssh_port}" || "${ssh_port}" =~ ^[0-9]+$ ]] || die "invalid CASPERBOX_SSH_PORT: ${ssh_port}"
+[[ -z "${vnc_port}" || "${vnc_port}" =~ ^[0-9]+$ ]] || die "invalid CASPERBOX_VNC_PORT: ${vnc_port}"
+[[ -z "${bind_addr}" || "${bind_addr}" =~ ^[0-9A-Fa-f:.]+$ ]] || die "invalid CASPERBOX_BIND: ${bind_addr}"
+[[ "${bind_addr}" == "0.0.0.0" || "${bind_addr}" == "::" ]] && bind_addr=""
+
+# ---- Host name ----
+# vncserver runs `hostname -f` and refuses to start when the container's own name does not resolve.
+# With the host's network podman uses the host's /etc/hosts, which does not know the container's name.
+host_name="$(hostname)"
+if [[ -n "${host_name}" ]] && ! getent hosts "${host_name}" >/dev/null 2>&1; then
+    log "Adding ${host_name} to /etc/hosts"
+    echo "127.0.1.1 ${host_name}" >> /etc/hosts || log "Warning: could not write /etc/hosts; vncserver may not start"
 fi
 
 # ---- Password (needed for SSH and sudo) ----
@@ -65,6 +87,16 @@ if [[ -n "${VIVADO_DIR:-}" ]]; then
 fi
 
 # ---- sshd ----
+listen_conf=/etc/ssh/sshd_config.d/30-casperbox-listen.conf
+if [[ -n "${ssh_port}" || -n "${bind_addr}" ]]; then
+    {
+        [[ -n "${ssh_port}" ]] && echo "Port ${ssh_port}"
+        [[ -n "${bind_addr}" ]] && echo "ListenAddress ${bind_addr}"
+    } > "${listen_conf}"
+else
+    rm -f "${listen_conf}"
+fi
+
 sshd_running() { pgrep -x sshd >/dev/null; }
 
 start_sshd() {
@@ -139,7 +171,10 @@ start_vnc() {
     rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
     log "Starting vncserver :1 (${VNC_GEOMETRY})"
     local out rc
-    out="$(su - "${user}" -c "${vncserver_cmd} :1 -geometry ${VNC_GEOMETRY} -depth 24 -localhost no -SecurityTypes VncAuth" 2>&1)"
+    local vnc_net=""
+    [[ -n "${vnc_port}" ]] && vnc_net+=" -rfbport ${vnc_port}"
+    [[ -n "${bind_addr}" ]] && vnc_net+=" -interface ${bind_addr}"
+    out="$(su - "${user}" -c "${vncserver_cmd} :1 -geometry ${VNC_GEOMETRY} -depth 24 -localhost no -SecurityTypes VncAuth${vnc_net}" 2>&1)"
     rc=$?
     [[ -n "${out}" ]] && printf '%s\n' "${out}"
     # Safety net: if TigerVNC still cannot migrate ~/.vnc to ~/.config/tigervnc,

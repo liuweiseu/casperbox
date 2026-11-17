@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the extra apt packages from `packages` in casper-dev.toml (passed as arguments).
+# Install the extra apt packages from `packages` in casperbox-dev.toml (passed as arguments).
 set -euo pipefail
 
 if (( $# == 0 )); then

@@ -73,7 +73,7 @@ Relative paths in it are relative to the file's directory.
 | `paths.license_dir` | `~/.Xilinx` | Mounted at `~/.Xilinx` |
 | `paths.work_dir` | `./work` | Mounted at `~/work` (created if missing) |
 | `ports.bind_address` | `0.0.0.0` | |
-| `ports.ssh` / `ports.vnc` | `2222` / `5901` | Host ports for container 22 / 5901. `0`: `up` picks the first free port from 2222 / 5901 (skipping ports of other casperbox containers, even stopped ones) and writes it back into the config file |
+| `ports.ssh` / `ports.vnc` | `0` / `0` in the generated file (`2222` / `5901` if missing) | Host ports for container 22 / 5901. `0`: `up` picks the first free port from 2222 / 5901 (skipping ports of other casperbox containers, even stopped ones) and writes it back into the config file |
 | `vnc.geometry` | `1920x1080` | |
 | `build.apt_mirror` | default servers | Ubuntu apt mirror for the image build, e.g. `http://us.archive.ubuntu.com/ubuntu` |
 | `[[mounts]]` | | Extra mounts: `host`, `container` (`~/` = home), `mode` |
@@ -95,7 +95,7 @@ Each config file is one container. Use another directory or file, and give it it
 `container.name` and ports:
 
 ```bash
-casperbox init lab.toml           # edit container.name; ports.ssh / ports.vnc (0 = pick free ports)
+casperbox init lab.toml           # edit container.name; ports 0 = up picks free ones
 casperbox -c lab.toml up
 casperbox ps                      # all casperbox containers, from any directory
 ```
@@ -207,6 +207,8 @@ The container uses pasta networking (no bridge network). Ports are forwarded wit
 the interface is named `eth0`, and the container sees the same IP as the host.
 `container.mac` is applied with pasta's `--ns-mac-addr` (e.g. for a MAC-locked node-locked license);
 the interface exists only in the container's network namespace, so reusing the host NIC's MAC is safe.
+`casperbox-dev` can also share the host's network instead (`network.mode = "host"`, see
+[Fast NICs](#fast-nics-host-network-and-rdma)).
 
 ## After changing the config
 
@@ -226,20 +228,25 @@ and no directories mounted by default.
 
 ```bash
 mkdir ~/dev-test && cd ~/dev-test
-casperbox-dev init                 # creates casper-dev.toml (default os: ubuntu:26.04)
-vi casper-dev.toml                 # set os, packages, mounts
+casperbox-dev init                 # creates casperbox-dev.toml (default os: ubuntu:26.04)
+vi casperbox-dev.toml              # set os, packages, mounts
 casperbox-dev up
 casperbox-dev shell
 ```
 
-`casper-dev.toml` has the same `[container]`, `[ports]`, `[vnc]`, `[build]`, `[[mounts]]` and `[[extra_ports]]`
+`casperbox-dev.toml` has the same `[container]`, `[ports]`, `[vnc]`, `[build]`, `[[mounts]]` and `[[extra_ports]]`
 sections as `casperbox.toml`, plus:
 
 | Key | Default | Description |
 |---|---|---|
 | `os` | `ubuntu:26.04` | Base image, `name:tag` of any apt-based image (Ubuntu / Debian) |
-| `packages` | `[]` | Extra apt packages installed into the image, also from the repositories below |
+| `packages` | `[]` | Extra apt packages installed into the image, also from the repositories below. In `[build]` (as in the generated config) or at the top of the file |
 | `[[apt_repos]]` | none | Third-party apt repositories, added before `packages` are installed |
+| `[[tools]]` | none | Tools installed by a script while the image is built (see below) |
+| `container.gpus` | `""` | NVIDIA GPUs: `"0"`, `"0,1"` or `"all"` (see [GPUs](#gpus)) |
+| `container.rdma` | `""` | RDMA devices: `"all"` or `"mlx5_0,mlx5_1"` |
+| `network.mode` | `"pasta"` | `"host"`: share the host's network, every NIC at full speed (see [Fast NICs](#fast-nics-host-network-and-rdma)) |
+| `ports.bind_address` | `0.0.0.0` | Also accepts a network interface name, e.g. `"eno1"` |
 
 - Find image names and tags on [Docker Hub](https://hub.docker.com/_/ubuntu) or with
   `podman search --list-tags docker.io/library/ubuntu`. `casperbox-dev list` shows the tested images;
@@ -247,9 +254,14 @@ sections as `casperbox.toml`, plus:
 - Before building, the base image is pulled and checked to be apt-based.
 - Firefox comes from Mozilla's APT repository (packages.mozilla.org): on Ubuntu 22.04+ the
   distribution's `firefox` package is a snap wrapper, which does not work in containers.
-- Default ports are 2322 (SSH) and 5902 (VNC), so it can run next to a `casperbox` container.
-- Each config gets its own image (`casperbox-dev:<container.name>`); changing `os`, `packages` or
-  `apt_repos` rebuilds it on the next `casperbox-dev up`.
+- The generated config sets `ports.ssh` and `ports.vnc` to 0, so `up` picks free host ports (and writes
+  them back), and it can run next to a `casperbox` container. Without a `[ports]` section the defaults
+  are 2322 (SSH) and 5902 (VNC).
+- The config was called `casper-dev.toml` before 0.4.7; that name is still found (with a warning).
+- Each config gets its own image (`casperbox-dev:<container.name>`); changing `os`, `packages`,
+  `apt_repos` or `tools` rebuilds it on the next `casperbox-dev up`.
+- All other commands (`build`, `up`, `down`, `restart`, `shell`, `status`, `logs`, `config`, `ps`)
+  work as in `casperbox`; `casperbox-dev init --os IMAGE` picks the base image.
 
 ### Third-party apt repositories
 
@@ -285,8 +297,119 @@ suite = "stable"
 
 The repositories stay in the image, so `sudo apt upgrade` in the container updates their packages too.
 `[build] apt_mirror` only replaces the Ubuntu servers.
-- All other commands (`build`, `up`, `down`, `restart`, `shell`, `status`, `logs`, `config`, `ps`)
-  work as in `casperbox`; `casperbox-dev init --os IMAGE` picks the base image.
+
+### Tools that are not apt packages: `[[tools]]`
+
+Each `[[tools]]` block installs one tool with a bash script while the image is built, for what apt
+does not have (release tarballs, vendor install scripts, per-user setup). The generated config has
+two commented-out examples (lazygit as root, shell aliases as the user); remove the leading `# ` to
+use them.
+
+```toml
+[[tools]]
+name = "lazygit"
+version = "0.65.1"
+script = '''
+curl -fsSLO "https://github.com/jesseduffield/lazygit/releases/download/v${VERSION}/lazygit_${VERSION}_linux_x86_64.tar.gz"
+tar -xzf "lazygit_${VERSION}_linux_x86_64.tar.gz" -C /usr/local/bin lazygit
+'''
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `name` | | Lowercase letters, digits, `.`, `_`, `-`; unique |
+| `version` | `""` | Passed to the script as `$VERSION` |
+| `run_as` | `"root"` | `"root"`, or `"user"`: the container user, with `HOME` set and `~/.local/bin` on `PATH` |
+| `script` | | The commands, run with bash and `set -euo pipefail`. Write it in `'''...'''` so backslashes and `$` stay as written |
+
+- All `root` tools run first, then the `user` tools, each group in the order written, so a tool can
+  rely on the ones above it. They run after `[[apt_repos]]` and `packages`. A failing script stops the build.
+- A script sees `$VERSION`, `$DEB_ARCH` (`amd64` / `arm64`), `$CONTAINER_USER` and `$HOME`.
+- Changing a script, a version or the order rebuilds the image on the next `up`.
+
+### GPUs
+
+`container.gpus = "0"`, `"0,1"` or `"all"` passes NVIDIA GPUs into the container, with
+`--ulimit nofile=65535`. Set `shm_size` (e.g. `"32g"`) for data loaders. `up` checks that `nvidia-ctk`
+exists and that every device is in the CDI list, and prints the commands below if not. The GPUs are
+fixed when the container is created: edit `gpus` and run `casperbox-dev up` to recreate it (no rebuild).
+`casperbox-dev status` shows the GPUs of the running container.
+
+casperbox-dev gives the GPUs to podman as **CDI** (Container Device Interface) devices,
+`nvidia.com/gpu=N`. A CDI spec file, normally `/etc/cdi/nvidia.yaml`, describes the devices; podman
+reads it and puts the `/dev/nvidia*` device nodes and the driver's libraries (`libcuda`, `nvidia-smi`,
+...) into the container. The host needs, set up once by an administrator:
+
+| What | Why | Check |
+| --- | --- | --- |
+| The **NVIDIA driver** | The container reuses the host's driver | `nvidia-smi` lists the GPUs |
+| **`nvidia-container-toolkit`** | Provides `nvidia-ctk`, which writes the CDI spec | `nvidia-ctk --version` |
+| A **CDI spec** | Names the devices (`nvidia.com/gpu=0`, ..., `=all`) | `nvidia-ctk cdi list` |
+
+Not needed: the CUDA toolkit on the host (CUDA libraries come from the container, e.g. pip or conda
+packages), Docker, or root to run the container.
+
+1. **The toolkit**, on Debian / Ubuntu:
+
+   ```bash
+   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+     | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+   curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+     | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+     | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+   sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+   ```
+
+2. **The CDI spec**; generate it again after every driver upgrade and whenever GPUs are added or removed:
+
+   ```bash
+   sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+   nvidia-ctk cdi list            # nvidia.com/gpu=0 ... nvidia.com/gpu=all
+   ```
+
+3. **Try it with podman alone**: `podman run --rm --device nvidia.com/gpu=all docker.io/library/ubuntu:24.04 nvidia-smi -L`
+
+| Symptom | Likely cause and fix |
+| --- | --- |
+| `nvidia-ctk is not installed` | Install `nvidia-container-toolkit` (step 1). |
+| `CDI device(s) not found: nvidia.com/gpu=N` | No spec yet, or an index that does not exist: run step 2 and compare with `nvidia-ctk cdi list`. |
+| `unresolvable CDI devices` from podman | The spec is not in `/etc/cdi` or `/var/run/cdi`, or it is unreadable for your user. |
+| `nvidia-smi` fails in the container after a driver upgrade | The spec is from the old driver: regenerate it (step 2), then `casperbox-dev up`. |
+
+### Fast NICs: host network and RDMA
+
+By default the container has its own network (`network.mode = "pasta"`, a user-space stack of a few
+Gbit/s) and only the SSH, VNC and extra ports are published. To use a 100G NIC at full speed (iperf3,
+UDP data streams, RDMA) while reaching SSH and VNC over the management NIC:
+
+```toml
+[network]
+mode = "host"              # the container shares the host's network: every NIC, at full speed
+
+[ports]
+bind_address = "eno1"      # the management NIC: an IP, or an interface name
+ssh = 0                    # SSH and VNC listen on these host ports (0 = up picks free ones)
+vnc = 0
+
+[container]
+rdma = "all"               # or "mlx5_0,mlx5_1"; see `ibv_devices` on the host
+```
+
+- **The host's addresses.** In host mode the container uses the host's IPs and MAC addresses, so a
+  license bound to the host's MAC works; `container.mac` and `[[extra_ports]]` have no effect (with a warning).
+- **`bind_address`** can be an interface name in casperbox-dev; `up` looks up its IPv4 address (and
+  prints it). With `0.0.0.0` SSH and VNC listen on every NIC, the fast ones included.
+- **Ports** are the host's own: `up` checks that they are free, and `0` picks free ones. The ports are
+  kept in a container label, so `casperbox-dev ps` shows them and other containers do not take them.
+- **The VNC display `:1` must be free on the host**, because host networking also shares abstract unix
+  sockets; `up` checks it.
+- **`container.rdma`** (InfiniBand or RoCE) passes the `/dev/infiniband/uverbs*` nodes of the devices
+  (and `umad*` when you may use them, and `rdma_cm`) and adds `IPC_LOCK` and an unlimited `memlock`.
+  `up` fails with instructions if your hard memlock limit is not unlimited. Verbs programs
+  (`ib_write_bw`, NCCL) work in either network mode; `rdma_cm` (`ib_write_bw -R`, IP-based MPI) needs
+  `mode = "host"`. Add `rdma-core`, `ibverbs-utils`, `rdmacm-utils`, `perftest` and `infiniband-diags`
+  (and `iperf3`, `ethtool`) to `packages`; the comment "Using an RDMA NIC" in the generated config
+  lists every step.
 
 ## Development
 
@@ -297,7 +420,7 @@ src/casperbox/
 ├── podman.py          podman build/run arguments and container queries
 ├── versions.py        toolflow versions: built-in (assets/versions) and plugins
 ├── plugins.py         `plugin new` / `plugin check`
-├── templates/         casperbox.toml, casper-dev.toml and plugin README templates
+├── templates/         casperbox.toml, casperbox-dev.toml and plugin README templates
 └── assets/            build context (see below)
 tests/                 pytest tests; smoke/ container smoke test
 ```

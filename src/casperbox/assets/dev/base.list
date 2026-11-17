@@ -1,5 +1,5 @@
 # Base apt packages of the casperbox-dev image (installed by common/scripts/install_base.sh).
-# Extra packages come from `packages` in casper-dev.toml.
+# Extra packages come from `packages` in casperbox-dev.toml.
 # A trailing "?" marks an optional package: installed only if the OS release has it.
 
 # ---- basic tools ----

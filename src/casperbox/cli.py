@@ -322,11 +322,16 @@ def make_app(kind: str) -> typer.Typer:
         own = podman.get_container(cfg.name)
         if own:
             podman.check_owner(cfg, own)
+        podman.resolve_host_settings(cfg)  # interface name -> IP, RDMA device nodes (casperbox-dev)
+        if cfg.bind_name:
+            info(f"ports.bind_address {cfg.bind_name} = {cfg.bind_address}")
+        podman.check_host_display(cfg, own)
         auto_ports = podman.pick_auto_ports(cfg, own)  # ports.ssh / ports.vnc = 0
         for key, port in auto_ports.items():
             setattr(cfg, f"{key}_port", port)
         podman.check_ports_free(cfg, own)
         podman.check_limits(cfg)
+        podman.check_gpus(cfg)
         if own:
             confirm_recreate(cfg, own, yes)  # before a possibly long image build
         if auto_ports:
@@ -360,8 +365,15 @@ def make_app(kind: str) -> typer.Typer:
         typer.echo(f"  SSH  : ssh -p {cfg.ssh_port} {cfg.user}@{host}")
         typer.echo(f"  VNC  : {host}:{cfg.vnc_port}")
         typer.echo(f"  Shell: {tool}{cfg_arg} shell")
-        for p in cfg.extra_ports:
-            typer.echo(f"  Port : {p.host} -> {p.container}/{p.protocol}")
+        if cfg.gpus:
+            typer.echo(f"  GPUs : {', '.join(cfg.gpus)}")
+        if cfg.rdma:
+            typer.echo(f"  RDMA : {', '.join(cfg.rdma)}")
+        if cfg.host_network:
+            typer.echo("  Network: host (all NICs of this machine are available in the container)")
+        else:
+            for p in cfg.extra_ports:
+                typer.echo(f"  Port : {p.host} -> {p.container}/{p.protocol}")
 
     @app.command()
     def up(
@@ -431,6 +443,12 @@ def make_app(kind: str) -> typer.Typer:
         typer.echo(f"{own.name}: {own.status}")
         limits = podman.container_limits(own.name)
         typer.echo("  Limits: " + (", ".join(f"{k} {v}" for k, v in limits.items()) or "none"))
+        if kind == DEV:
+            gpus = [d.removeprefix("nvidia.com/gpu=") for d in podman.container_gpus(own.name)]
+            typer.echo("  GPUs  : " + (", ".join(gpus) or "none"))
+            rdma = [d.removeprefix("/dev/infiniband/") for d in podman.container_rdma(own.name)]
+            typer.echo("  RDMA  : " + (", ".join(rdma) or "none"))
+            typer.echo(f"  Network: {podman.container_network(own.name) or 'unknown'}")
         if own.ports:
             typer.echo("  Ports:")
             for p in own.ports:
@@ -509,6 +527,8 @@ def make_app(kind: str) -> typer.Typer:
             rows += [("apt repo", f"{r.name}: {r.url} {r.suite or '<codename>'} {' '.join(r.components)}".rstrip()
                       + (" (key fingerprint checked)" if r.key_fingerprint else ""))
                      for r in cfg.apt_repos] or [("apt repos", "-")]
+            rows += [("tool", f"{t.name}{' ' + t.version if t.version else ''} ({t.run_as})") for t in cfg.tools] \
+                or [("tools", "-")]
         rows.append(("apt mirror", cfg.apt_mirror or "default"))
         rows += [
             ("image", cfg.image),
@@ -525,7 +545,22 @@ def make_app(kind: str) -> typer.Typer:
             f"{key} " + (f"auto (first free from {AUTO_PORT_START[key]}, picked by up)" if port == AUTO_PORT else str(port))
             for key, port in (("ssh", cfg.ssh_port), ("vnc", cfg.vnc_port)))))
         rows.append(("limits", " ".join(podman.limit_args(cfg)) or "none"))
+        if kind == DEV:
+            rows.append(("gpus", ", ".join(cfg.gpus) or "none"))
+            rows.append(("rdma", ", ".join(cfg.rdma) or "none"))
         rows.append(("network", podman.pasta_network(cfg)))
+        if cfg.bind_name:
+            try:
+                podman.resolve_bind_address(cfg)
+                rows.append(("bind", f"{cfg.bind_name} = {cfg.bind_address}"))
+            except CasperError as e:
+                warn(str(e))
+        if cfg.rdma:
+            try:
+                cfg.rdma_paths = podman.rdma_devices(cfg.rdma)
+                rows.append(("rdma nodes", " ".join(cfg.rdma_paths)))
+            except CasperError as e:
+                warn(str(e))
         width = max(len(k) for k, _ in rows)
         for k, v in rows:
             typer.echo(f"{k:<{width}}  {v}")
@@ -534,7 +569,8 @@ def make_app(kind: str) -> typer.Typer:
         for k, v in podman.container_env(cfg).items():
             typer.echo(f"  {k}={'******' if k in podman.SECRET_ENV else v}")
         typer.echo("\nbuild (CONTEXT: temporary copy of " + ", ".join(
-            f"{name}/ <- {src}" for name, src in cfg.build_sources) + "):")
+            f"{name}/ <- {src}" for name, src in cfg.build_sources)
+            + (", tools/ <- [[tools]]" if kind == DEV else "") + "):")
         typer.echo("  " + shlex.join(podman.build_args(cfg, Path("CONTEXT"))))
         typer.echo("\nrun:")
         typer.echo("  " + shlex.join(podman.run_args(cfg)))
@@ -551,6 +587,8 @@ def make_app(kind: str) -> typer.Typer:
         rows = [("NAME", header, "STATUS", "PORTS", "CONFIG")]
         for c in containers:
             ports = ",".join(f"{p.host}->{p.container}/{p.protocol}" for p in c.ports)
+            if c.labels.get(podman.LABEL_HOST_PORTS):
+                ports += " (host network)"
             rows.append((c.name, c.labels.get(label, ""), c.status, ports, c.config_path))
         _print_table(rows)
 

@@ -77,7 +77,7 @@ if [[ "${tool}" == casperbox ]]; then
     sed -i -e 's|^dir = "/tools/Xilinx"|dir = "./xilinx"|' \
            -e 's|^license_dir = "~/.Xilinx"|license_dir = "./lic"|' "${config}"
 else
-    config=casper-dev.toml
+    config=casperbox-dev.toml
     "${tool}" init --os "${os_image}"
     # python3 is used below for the forwarded-port test; it also tests `packages`
     sed -i 's|^packages = \[|packages = ["python3",|' "${config}"

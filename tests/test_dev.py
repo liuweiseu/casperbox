@@ -18,7 +18,7 @@ from casperbox.podman import build_args, container_env, run_args
 
 @pytest.fixture
 def dev(tmp_path: Path):
-    cfg_path = tmp_path / "proj" / "casper-dev.toml"
+    cfg_path = tmp_path / "proj" / "casperbox-dev.toml"
     cfg_path.parent.mkdir()
 
     def make(**doc):
@@ -58,9 +58,9 @@ def test_template_parses():
     for image in (*DEV_TESTED_OS, "debian:13"):
         doc = tomllib.loads(render_dev_template(image))
         assert doc["os"] == image
-        assert doc["packages"] == []
+        assert doc["build"]["packages"] == []
         assert doc["container"]["name"] == f"casper-dev-{os_slug(image)}"
-        assert (doc["ports"]["ssh"], doc["ports"]["vnc"]) == (2322, 5902)
+        assert (doc["ports"]["ssh"], doc["ports"]["vnc"]) == (0, 0)  # auto
 
 
 def test_defaults(dev):
@@ -135,3 +135,29 @@ def test_dev_apt_mirror(dev):
     assert dev().apt_mirror == ""
     cfg = dev(build={"apt_mirror": "https://mirrors.ocf.berkeley.edu/ubuntu"})
     assert "APT_MIRROR=https://mirrors.ocf.berkeley.edu/ubuntu" in build_args(cfg, Path("/ctx"))
+
+
+def test_legacy_config_name(tmp_path, monkeypatch, capsys):
+    from casperbox.config import DEV, resolve_config_path
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "casper-dev.toml").write_text("")
+    assert resolve_config_path(None, DEV) == tmp_path / "casper-dev.toml"
+    assert "the default name is now casperbox-dev.toml" in capsys.readouterr().err
+    (tmp_path / "casperbox-dev.toml").write_text("")
+    assert resolve_config_path(None, DEV) == tmp_path / "casperbox-dev.toml"
+
+
+def test_packages_in_build_or_top_level(dev):
+    assert dev(build={"packages": ["git", "git"]}).packages == ["git"]
+    assert dev(packages=["vim"]).packages == ["vim"]
+    with pytest.raises(CasperError, match="both at the top level and in \\[build\\]"):
+        dev(packages=["vim"], build={"packages": ["git"]})
+
+
+def test_template_order():
+    text = render_dev_template("ubuntu:24.04")
+    order = [text.index(s) for s in ("\nos = ", "\n[container]", "\n[network]", "\n[ports]", "\n[vnc]",
+                                     "# [[mounts]]", "# [[extra_ports]]", "\n[build]", "\npackages = [",
+                                     "# [[apt_repos]]", "# [[tools]]", "# Using an RDMA NIC")]
+    assert order == sorted(order)
