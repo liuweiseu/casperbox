@@ -18,7 +18,7 @@ CONDA_ENV_NAME = "casper"
 
 # mlib_devel
 MLIB_DEVEL_REPO = "https://github.com/liuweiseu/mlib_devel.git"
-MLIB_DEVEL_BRANCH = "scilab-dev-ai"
+MLIB_DEVEL_BRANCH = "scilab-dev"
 
 # device-tree-xlnx (used by mlib_devel via XLNX_DT_REPO_PATH)
 DEVICE_TREE_XLNX_REPO = "https://github.com/Xilinx/device-tree-xlnx.git"
