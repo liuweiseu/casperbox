@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Configure mlib_devel (runs as the container user):
-#   1. Clone mlib_devel and device-tree-xlnx into ~/toolflow
+#   1. Clone mlib_devel (with its submodules) and device-tree-xlnx into ~/toolflow
 #   2. Install mlib_devel's python dependencies into the conda env
 #   3. Generate ~/.startsg.local and load it from ~/.bashrc
 #   4. Link mlib_devel/startsg to ~/.local/bin/startsg
@@ -28,6 +28,9 @@ mkdir -p "${toolflow_dir}"
 echo ">>> Cloning mlib_devel (${MLIB_DEVEL_BRANCH})"
 git clone "${depth_args[@]}" --single-branch --branch "${MLIB_DEVEL_BRANCH}" \
     "${MLIB_DEVEL_REPO}" "${mlib_dir}"
+
+echo ">>> Fetching mlib_devel submodules"
+git -C "${mlib_dir}" submodule update --init --recursive "${depth_args[@]}"
 
 echo ">>> Cloning device-tree-xlnx (${DEVICE_TREE_XLNX_BRANCH})"
 git clone "${depth_args[@]}" --single-branch --branch "${DEVICE_TREE_XLNX_BRANCH}" \
