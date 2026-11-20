@@ -13,7 +13,7 @@ of CASPER toolflow components (see [casperbox-base](#casperbox-base)).
 
 | Version | Base image | Vivado | Python | mlib_devel | device-tree-xlnx | Scilab |
 |---|---|---|---|---|---|---|
-| m2021a | Ubuntu 20.04 | 2021.1 | 3.14 | scilab-dev | xlnx_rel_v2021.1 | 2024.1.0 |
+| m2021a | Ubuntu 20.04 | 2021.1 | 3.14 | scilab-m2021a | xlnx_rel_v2021.1 | 2024.1.0 |
 
 ## Host requirements
 
