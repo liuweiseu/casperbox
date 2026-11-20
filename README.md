@@ -17,9 +17,43 @@ of CASPER toolflow components (see [casperbox-base](#casperbox-base)).
 
 ## Host requirements
 
+- A Linux host (x86_64). Tested on Ubuntu 26.04
 - [uv](https://docs.astral.sh/uv/) (installs without sudo)
 - rootless podman >= 4.4 (run as a regular user) and the passt package (provides pasta)
-- An installed Vivado (version in the table above) and a Xilinx license
+- An installed Vivado (version in the table above, see [Installing Vivado](#installing-vivado)) and a Xilinx license
+
+## Installing Vivado
+
+Older Vivado releases do not support a recent host OS, and their installer may fail on it. Install
+Vivado from a `casperbox-base` container instead, with the base OS of the toolflow version (see
+[Supported versions](#supported-versions), e.g. `ubuntu:20.04` for m2021a), into an empty host
+directory that is mounted into it. The host directory is up to you; `/opt/Xilinx` below is only an
+example (any empty directory you can write to works, e.g. `~/Xilinx`):
+
+```bash
+sudo mkdir -p /opt/Xilinx && sudo chown "$(id -un):$(id -gn)" /opt/Xilinx   # empty host directory
+mkdir ~/vivado-installer && cd ~/vivado-installer
+casperbox-base init --os ubuntu:20.04
+vi casperbox-base.toml            # add the [[mounts]] below
+casperbox-base up
+```
+
+```toml
+[[mounts]]
+host = "/opt/Xilinx"
+container = "/opt/Xilinx"         # the same path as on the host
+mode = "rw"
+```
+
+Then copy the installer into the container (or mount its directory too), connect with VNC and run it,
+installing into `/opt/Xilinx`. Afterwards set `vivado.dir = "/opt/Xilinx"` in `casperbox.toml`; the
+`casperbox-base` container can be removed with `casperbox-base down`.
+
+- Use the same path in the container as on the host: `casperbox` mounts Vivado at its host path, and
+  Vivado's scripts contain the install path.
+- The container user has your host UID/GID, so the installed files belong to you on the host.
+- If the installer complains about missing libraries, add the packages from
+  `src/casperbox/assets/versions/<version>/pkgs.list` to `packages` in `casperbox-base.toml`.
 
 ## Host setup
 
