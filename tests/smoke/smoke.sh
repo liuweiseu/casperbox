@@ -192,8 +192,8 @@ if [[ "${tool}" == casperbox ]]; then
     check "MATLAB_PATH set to /tmp" /tmp "$(ssh_login 'echo ${MATLAB_PATH:-}')"
     check "FRONTEND set to scilab" scilab "$(ssh_login 'echo ${FRONTEND:-}')"
     check "CASPER_DEBUG set to off" off "$(ssh_login 'echo ${CASPER_DEBUG:-}')"
-    check "pyqt6, pyqtgraph, rich importable" yes \
-        "$(ssh_login 'QT_QPA_PLATFORM=offscreen python -c "import PyQt6.QtWidgets, pyqtgraph, rich" && echo yes || echo no')"
+    check "pyqt6, pyqtgraph, rich, pyDigitalWaveTools importable" yes \
+        "$(ssh_login 'QT_QPA_PLATFORM=offscreen python -c "import PyQt6.QtWidgets, pyqtgraph, rich, pyDigitalWaveTools" && echo yes || echo no')"
     check "device-tree-xlnx cloned" yes "$(ssh_run 'test -d toolflow/device-tree-xlnx && echo yes || echo no')"
     check "scilab on PATH" "/home/casper/.local/bin/scilab" "$(ssh_login 'command -v scilab')"
     # versions/m2021a/pkgs.list (Vivado runtime dependencies) was installed

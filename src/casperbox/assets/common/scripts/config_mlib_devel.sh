@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Configure mlib_devel (runs as the container user):
 #   1. Clone mlib_devel (with its submodules) and device-tree-xlnx into ~/toolflow
-#   2. Install mlib_devel's python dependencies into the conda env
+#   2. Install mlib_devel's python dependencies and extra pip packages into the conda env
 #   3. Generate ~/.startsg.local and load it from ~/.bashrc
 #   4. Link mlib_devel/startsg to ~/.local/bin/startsg
 set -euo pipefail
@@ -43,6 +43,10 @@ conda activate "${CONDA_ENV_NAME}"
 python -m pip install --no-cache-dir --upgrade pip
 # requirements.txt has -e git+... dependencies; put their sources in ~/toolflow/src
 (cd "${mlib_dir}" && python -m pip install --no-cache-dir --src "${toolflow_dir}/src" -r requirements.txt)
+# Extra pip packages not in requirements.txt (and not on conda-forge)
+pip_packages=(pyDigitalWaveTools)
+echo ">>> Installing ${pip_packages[*]} into conda env ${CONDA_ENV_NAME}"
+python -m pip install --no-cache-dir "${pip_packages[@]}"
 
 echo ">>> Generating ${startsg_local}"
 cat > "${startsg_local}" <<EOF
