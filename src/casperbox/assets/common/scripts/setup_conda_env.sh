@@ -13,8 +13,8 @@ source "${CONDA_DIR}/etc/profile.d/conda.sh"
 conda create -y -n "${CONDA_ENV_NAME}" --override-channels -c conda-forge \
     "python=${PYTHON_VERSION}" pip
 
-# Extra packages used by the toolflow tools (GUI plots, terminal output)
-conda_packages=(pyqt6 pyqtgraph rich)
+# Extra packages used by the toolflow tools (GUI plots, plotting, terminal output)
+conda_packages=(pyqt6 pyqtgraph rich matplotlib)
 echo ">>> Installing ${conda_packages[*]} into conda env ${CONDA_ENV_NAME}"
 conda install -y -n "${CONDA_ENV_NAME}" --override-channels -c conda-forge "${conda_packages[@]}"
 conda clean -afy

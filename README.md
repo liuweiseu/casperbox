@@ -232,7 +232,7 @@ casperbox init --toolflow m2025a       # then casperbox up as usual
 ```
 
 Shells automatically load Vivado `settings64.sh` and the variables in `~/.startsg.local`, and activate the conda env `casper`
-(with `pyqt6`, `pyqtgraph` and `rich` from conda-forge, and `pyDigitalWaveTools` from pip, installed).
+(with `pyqt6`, `pyqtgraph`, `rich` and `matplotlib` from conda-forge, and `pyDigitalWaveTools` from pip, installed).
 Scilab is in `/opt/scilab`; run `scilab` (linked in `~/.local/bin`).
 
 > `~/toolflow` is part of the image, not a mount. `down`/`up` recreate the container and
